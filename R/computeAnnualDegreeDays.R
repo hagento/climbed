@@ -1,6 +1,100 @@
 # --- FUNCTIONS TO CALCULATE ANNUAL DEGREE DAYS --------------------------------
 
 
+#' Initialize Degree Days Calculation
+#'
+#' Initiates the calculation of degree days for a single scenario, model, and time period.
+#' The calculation is split into yearly periods to improve computational stability.
+#'
+#' @param fileMapping A named list containing file paths and metadata. Expected elements include:
+#'   \describe{
+#'     \item{tas}{Path to temperature data file.}
+#'     \item{rsds}{Path to solar radiation data file (required if \code{bait} is TRUE).}
+#'     \item{sfcwind}{Path to surface wind data file (required if \code{bait} is TRUE).}
+#'     \item{huss}{Path to humidity data file (required if \code{bait} is TRUE).}
+#'     \item{start}{Start year of the time period.}
+#'     \item{end}{End year of the time period.}
+#'     \item{rcp}{RCP scenario identifier.}
+#'     \item{gcm}{GCM model identifier.}
+#'   }
+#' @param pop SpatRaster with annual population data.
+#' @param ssp Shared Socioeconomic Pathway scenario.
+#' @param bait Logical indicating whether to use raw temperature or BAIT as ambient temperature.
+#' @param tLim Temperature limits for degree day calculations.
+#' @param countries SpatRaster containing the region masks.
+#' @param hddcddFactor data.frame containing pre-computed degree days.
+#' @param wBAIT (Optional) Weights for BAIT adjustments. Default is \code{NULL}.
+#' @param baitPars (Optional) Parameters for BAIT calculations. Default is \code{NULL}.
+#'
+#' @return A data frame containing annual degree days.
+#'
+#' @author Hagen Tockhorn
+#'
+#' @importFrom dplyr mutate
+#' @importFrom magrittr %>%
+
+initCalculation <- function(fileMapping,
+                            pop,
+                            ssp,
+                            bait,
+                            tLim,
+                            countries,
+                            hddcddFactor,
+                            wBAIT = NULL,
+                            baitPars = NULL) {
+  
+  # define gsub function that handles NULL values in our favor
+  nullGsub <- function(pattern, replacement, x) {
+    if (!is.null(x)) gsub(pattern, replacement, x) else NULL
+  }
+  
+  # extract filenames
+  ftas  <- fileMapping[["tas"]]
+  frsds <- if (bait) fileMapping[["rsds"]]    else NULL
+  fsfc  <- if (bait) fileMapping[["sfcwind"]] else NULL
+  fhuss <- if (bait) fileMapping[["huss"]]    else NULL
+  
+  # extract temporal interval
+  yStart <- fileMapping[["start"]] %>% as.numeric()
+  yEnd   <- fileMapping[["end"]] %>% as.numeric()
+  
+  # extract RCP scenario + model
+  rcp   <- fileMapping[["rcp"]] %>% unique()
+  model <- fileMapping[["gcm"]] %>% unique()
+  
+  
+  # loop over single years and compute annual degree days
+  hddcdd <- do.call(
+    "rbind",
+    lapply(
+      seq(1, yEnd - yStart + 1),
+      function(i) {
+        compStackHDDCDD(ftas  = gsub(".nc", paste0("_", i, ".nc"), ftas),
+                        frsds = if (bait) gsub(".nc", paste0("_", i, ".nc"), frsds) else NULL,
+                        fsfc  = if (bait) gsub(".nc", paste0("_", i, ".nc"), fsfc)  else NULL,
+                        fhuss = if (bait) gsub(".nc", paste0("_", i, ".nc"), fhuss) else NULL,
+                        tlim = tLim,
+                        pop = pop,
+                        countries = countries,
+                        factors = hddcddFactor,
+                        bait = bait,
+                        wBAIT  = wBAIT,
+                        baitPars = baitPars)
+      }
+    )
+  )
+  
+  hddcdd <- hddcdd %>%
+    mutate("model" = model,
+           "ssp" = ssp,
+           "rcp" = rcp)
+  
+  return(hddcdd)
+}
+
+
+
+
 #' Calculate country-wise population-weighted HDD/CDD values
 #'
 #' This function calculates country-wise population-weighted HDD/CDD values for
