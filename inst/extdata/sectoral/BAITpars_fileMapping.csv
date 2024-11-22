@@ -1,0 +1,6 @@
+"gcm","rcp","start","end","tas","rsds","sfcwind","huss"
+"20crv3-era5","historical","2001","2010","20crv3-era5_obsclim_tas_global_daily_2001_2010.nc","20crv3-era5_obsclim_rsds_global_daily_2001_2010.nc","20crv3-era5_obsclim_sfcwind_global_daily_2001_2010.nc","20crv3-era5_obsclim_huss_global_daily_2001_2010.nc"
+"20crv3-era5","historical","2011","2020","20crv3-era5_obsclim_tas_global_daily_2011_2020.nc","20crv3-era5_obsclim_rsds_global_daily_2011_2020.nc","20crv3-era5_obsclim_sfcwind_global_daily_2011_2020.nc","20crv3-era5_obsclim_huss_global_daily_2011_2020.nc"
+"20crv3-era5","historical","2021","2021","20crv3-era5_obsclim_tas_global_daily_2021_2021.nc","20crv3-era5_obsclim_rsds_global_daily_2021_2021.nc","20crv3-era5_obsclim_sfcwind_global_daily_2021_2021.nc","20crv3-era5_obsclim_huss_global_daily_2021_2021.nc"
+"gswp3-w5e5","historical","2001","2010","gswp3-w5e5_obsclim_tas_global_daily_2001_2010.nc","gswp3-w5e5_obsclim_rsds_global_daily_2001_2010.nc","gswp3-w5e5_obsclim_sfcwind_global_daily_2001_2010.nc","gswp3-w5e5_obsclim_huss_global_daily_2001_2010.nc"
+"gswp3-w5e5","historical","2011","2019","gswp3-w5e5_obsclim_tas_global_daily_2011_2019.nc","gswp3-w5e5_obsclim_rsds_global_daily_2011_2019.nc","gswp3-w5e5_obsclim_sfcwind_global_daily_2011_2019.nc","gswp3-w5e5_obsclim_huss_global_daily_2011_2019.nc"

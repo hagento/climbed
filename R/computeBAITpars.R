@@ -1,29 +1,32 @@
-#' calculate regression parameters for BAIT climate variables
+#' Calculate Regression Parameters for BAIT Climate Variables
 #'
-#' @description linear regression on historic data to determine regression
-#' parameters for surface downdwelling shortwave radiation (rsds), near-surface
-#' wind speed (sfcwind) and near-surface specific humidity (huss) with respect
-#' to near-surface air temperature (tas).
-#' The regression is done with on a simple linear model, where the historical
-#' input data covers the years of 2000-2014. For rsds and sfcwind, a simple linear
-#' relationship is assumed where for huss an exponential relation is assumed,
-#' buildig upon the non-linear relation between water vapor pressure and temperature.
+#' @description Performs linear regression on historical climate data to calculate
+#' regression parameters for key climate variables: surface downwelling shortwave
+#' radiation (rsds), near-surface wind speed (sfcwind), and near-surface specific
+#' humidity (huss), with respect to near-surface air temperature (tas).
 #'
-#' @param model specify GCM responsible for data input
-#' @param cacheDir directory containing pre-calculated function output
+#' The regression utilizes a simple linear model based on historical data from
+#' 2000 to 2019-21 depending on the model. For rsds and sfcwind, a linear relationship
+#' is assumed, while for huss, an exponential relationship is adopted, reflecting
+#' the non-linear dependence of water vapor pressure on temperature.
 #'
-#' @return terra SpatRaster covering one regression parameter per layer per cell
+#' @param model Character string specifying the GCM responsible for data input.
+#' @param cacheDir Character string specifying the directory containing pre-calculated
+#' function outputs.
+#'
+#' @return A `terra::SpatRaster` object with layers representing regression
+#' parameters for each cell.
 #'
 #' @author Hagen Tockhorn
 #'
 #' @importFrom terra regress rast
-#' @importFrom madrat toolGetMapping
+#' @importFrom madrat toolGetMapping readSource
 #' @importFrom magclass as.magpie
-#' @importFrom madrat readSource
 
 
-calcBAITpars <- function(model = "GFDL-ESM4",
-                         cacheDir = NULL) {
+
+computeBAITpars <- function(model = "20crv3-era5",
+                            cacheDir = NULL) {
 
   # CHECK CACHE-----------------------------------------------------------------
 
@@ -48,17 +51,21 @@ calcBAITpars <- function(model = "GFDL-ESM4",
 
   # READ-IN DATA----------------------------------------------------------------
 
-  files <- toolGetMapping("baitregression-files_test.csv", type = "sectoral") %>%
+  files <- read.csv("inst/extdata/sectoral/BAITpars_fileMapping.csv") %>%
     filter(.data[["gcm"]] == model)
 
-  vars <- unique(files$variable)
+  # files <- toolGetMapping("BAITpars_fileMapping.csv", type = "sectoral") %>%
+  #   filter(.data[["gcm"]] == model)
+
+
+  vars <- c("tas", "sfcwind", "rsds", "huss")
 
   # nolint start
   data <- sapply(vars, function(v) {
-    tmp <- sapply(files[files$variable == v, ]$file,
+    tmp <- sapply(files[[v]],
                   function(f) {
                     return(readSource("ISIMIPbuildings", subtype = f))
-                    },
+                  },
                   USE.NAMES = FALSE) %>%
       rast()
 
@@ -94,6 +101,7 @@ calcBAITpars <- function(model = "GFDL-ESM4",
     rast()
   # nolint end
 
+  terra::writeCDF(regPars, paste0("/p/tmp/hagento/output/", model, "/baitpars_", model, ".nc"))
 
 
   # OUTPUT----------------------------------------------------------------------
