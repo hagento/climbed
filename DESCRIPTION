@@ -1,0 +1,8 @@
+Package: climbed
+Type: Package
+Title: Climate Data Integration for Modeling Building Energy Demand
+Version: 0.1.0-dev
+Author@R: c(person("Hagen", "Tockhorn", , "hagento@pik-potsdam.de", role = c("aut", ""cre)))
+Description: Prepare climate data to be used by building energy demand models.
+License: MIT + file LICENSE
+Encoding: UTF-8
