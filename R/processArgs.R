@@ -56,8 +56,8 @@ processArgs <- function(tLim, std, ssp) {
     tLim <- as.list(tLim)
 
     # Check that names are "HDD" and "CDD"
-    valid_names <- c("HDD", "CDD")
-    if (!all(names(tLim) %in% valid_names)) {
+    validNames <- c("HDD", "CDD")
+    if (!all(names(tLim) %in% validNames)) {
       stop("tLim must have names 'HDD' and/or 'CDD'.")
     }
 
@@ -103,7 +103,8 @@ processArgs <- function(tLim, std, ssp) {
   #### Process ssp ####
 
   if (is.character(ssp)) {
-    ssp <- as.vector(ssp)
+    ssp <- as.vector(ssp) %>%
+      tolower()
   } else {
     stop("ssp must be a character string or vector.")
   }
