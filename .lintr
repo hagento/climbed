@@ -1,0 +1,4 @@
+linters: lucode2::lintrRules(modification = list(object_name_linter  = NULL,
+                                                 todo_comment_linter = NULL,
+                                                 cyclocomp_linter    = NULL))
+encoding: "UTF-8"

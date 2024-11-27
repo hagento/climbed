@@ -5,4 +5,15 @@ Version: 0.1.0-dev
 Author@R: c(person("Hagen", "Tockhorn", , "hagento@pik-potsdam.de", role = c("aut", ""cre)))
 Description: Prepare climate data to be used by building energy demand models.
 License: MIT + file LICENSE
+Imports:
+    dplyr,
+    ncdf4,
+    pracma,
+    raster,
+    stringr,
+    magrittr,
+    terra,
+    quitte,
+    tidyr
 Encoding: UTF-8
+RoxygenNote: 7.3.2
