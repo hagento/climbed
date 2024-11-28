@@ -6,3 +6,4 @@ Author@R: c(person("Hagen", "Tockhorn", , "hagento@pik-potsdam.de", role = c("au
 Description: Prepare climate data to be used by building energy demand models.
 License: MIT + file LICENSE
 Encoding: UTF-8
+RoxygenNote: 7.3.2

@@ -1,37 +1,34 @@
-# CLIMBED - Climate Data Integration for Modeling Building Energy Demand
+# Prepare climate data for buildings sector models
 
-**Version:** v0.1.0-dev
-**Status:** 🚧 Under Development
-
----
-
-## About
-
-This project is currently in its early development phase. The functionality is incomplete, and this repository may undergo significant changes as development progresses.
-
-A complete and detailed README will be added soon, including:
-
-- **Overview of the project**
-- **Installation instructions**
-- **Usage examples**
-- **Contributing guidelines**
-- **License information**
+R package **climbed**, version **0.1.0**
 
 ---
 
-## Current State
+## ️⚠️ Development Status
 
-- This version (`v0.1.0-dev`) serves as the initial commit for development purposes.
-- The codebase is not yet functional for production use.
-- Contributions and feedback are welcome, but expect active updates and potential breaking changes.
+**This package is currently in development and may not function as intended. It is not ready for production use.**
 
 ---
 
-## Next Steps
+## Purpose and Functionality
 
-### TODO
-- [ ] Implement core functionality
-- [ ] Add unit tests
-- [ ] Write a full README with usage instructions
+CLIMBED (Climate Data Integration for Modeling Building Energy Demand) prepares climate data 
+as input for other building sector models. 
 
-Stay tuned for updates as this project takes shape! 🚀
+---
+
+## Installation
+
+Will follow with the first working version.
+
+---
+
+## Questions / Problems
+
+In case of questions / problems, please contact Hagen Tockhorn at <hagento@pik-potsdam.de>.
+
+---
+
+## Citation
+
+Will follow with the first working version.

@@ -11,16 +11,20 @@
 #' for an interval of ten years.
 #'
 #' @param ftas file name of data on near-surface atmospherical temperature
-#' @param tlim named list of limit temperature sequences for \code{HDD} and \code{CDD}
+#' @param tlim named list of limit temperature sequences for \code{HDD} and
+#' \code{CDD}
 #' @param countries SpatRaster defining (regional) aggregation boundaries
 #' @param pop SpatRaster containing population data
-#' @param factors data frame with degree day values for \code{temp/tlim} combination
+#' @param factors data frame with degree day values for \code{temp/tlim}
+#' combination
 #' @param bait boolean, BAIT is used as ambient temperature
-#' @param frsds file name of data on surface downdwelling shortwave radiation (optional)
+#' @param frsds file name of data on surface downdwelling shortwave radiation
+#' (optional)
 #' @param fsfc file name of data on near-surface wind speed (optional)
 #' @param fhuss file name of data on near-surface specific humidity (optional)
 #' @param wBAIT named list containing BAIT weights (optional)
-#' @param params SpatRaster containing regression parameters from \code{calcBAITpars} (optional)
+#' @param params SpatRaster containing regression parameters from
+#' \code{calcBAITpars} (optional)
 #' @param rasDir absolute path to directory for saving raster files
 #'
 #' @return data frame containing regional population-weighted annual degree days
@@ -29,7 +33,11 @@
 #'
 #' @importFrom raster writeRaster
 #' @importFrom stringr str_split
-#' @importFrom terra writeCDF
+#' @importFrom terra writeCDF round
+#' @importFrom madrat readSource
+#' @importFrom dplyr mutate
+#' @importFrom magrittr %>%
+
 
 compStackHDDCDD <- function(ftas, tlim, countries, pop, factors, bait,
                             frsds = NULL,
@@ -37,7 +45,6 @@ compStackHDDCDD <- function(ftas, tlim, countries, pop, factors, bait,
                             fhuss = NULL,
                             wBAIT = NULL,
                             baitPars = NULL) {
-
   # read cellular temperature
   temp <- readSource("ISIMIPbuildings", subtype = ftas, convert = TRUE)
 
@@ -86,8 +93,6 @@ compStackHDDCDD <- function(ftas, tlim, countries, pop, factors, bait,
     )
   )
 
-  rm(tasData, baitInput, temp)
-
   return(hddcdd)
 }
 
@@ -104,7 +109,10 @@ compStackHDDCDD <- function(ftas, tlim, countries, pop, factors, bait,
 #'
 #' @author Hagen Tockhorn
 #'
-#' @importFrom terra classify tapp
+#' @importFrom terra classify tapp time
+#' @importFrom dplyr filter reframe .data
+#' @importFrom magrittr %>%
+
 
 compCellHDDCDD <- function(temp, typeDD, tlim, factors) {
   # extract years
@@ -144,7 +152,7 @@ compCellHDDCDD <- function(temp, typeDD, tlim, factors) {
 #'
 #' @author Hagen Tockhorn
 #'
-#' @importFrom terra subset
+#' @importFrom terra subset global
 
 aggCells <- function(data, weight, mask) {
   yearsData   <- names(data)
@@ -182,4 +190,3 @@ aggCells <- function(data, weight, mask) {
   )
   return(hddcddAgg)
 }
-
