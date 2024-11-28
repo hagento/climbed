@@ -1,5 +1,12 @@
 ^.*\.Rproj$
 ^\.Rproj\.user$
-^.*\.Rproj$
-^\.Rproj\.user$
 ^.lintr$
+^\.buildlibrary$
+^\.pre-commit-config\.yaml$
+^Makefile$
+^workflow$
+^tests/.lintr$
+^LICENSE\.md$
+^codecov\.yml$
+^\.github$
+^.*CITATION.cff$

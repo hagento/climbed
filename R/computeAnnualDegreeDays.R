@@ -23,9 +23,8 @@
 #' @param fsfc file name of data on near-surface wind speed (optional)
 #' @param fhuss file name of data on near-surface specific humidity (optional)
 #' @param wBAIT named list containing BAIT weights (optional)
-#' @param params SpatRaster containing regression parameters from
+#' @param baitPars SpatRaster containing regression parameters from
 #' \code{calcBAITpars} (optional)
-#' @param rasDir absolute path to directory for saving raster files
 #'
 #' @return data frame containing regional population-weighted annual degree days
 #'
@@ -37,7 +36,6 @@
 #' @importFrom madrat readSource
 #' @importFrom dplyr mutate
 #' @importFrom magrittr %>%
-
 
 compStackHDDCDD <- function(ftas, tlim, countries, pop, factors, bait,
                             frsds = NULL,
@@ -112,7 +110,6 @@ compStackHDDCDD <- function(ftas, tlim, countries, pop, factors, bait,
 #' @importFrom terra classify tapp time
 #' @importFrom dplyr filter reframe .data
 #' @importFrom magrittr %>%
-
 
 compCellHDDCDD <- function(temp, typeDD, tlim, factors) {
   # extract years

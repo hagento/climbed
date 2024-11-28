@@ -198,4 +198,3 @@ compBAIT <- function(baitInput, tasData, weight = NULL, params = NULL) {
 
   return(bait)
 }
-
