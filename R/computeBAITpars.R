@@ -22,6 +22,7 @@
 #' @importFrom terra regress rast
 #' @importFrom madrat toolGetMapping readSource
 #' @importFrom magclass as.magpie
+#' @importFrom utils read.csv2
 
 
 
@@ -42,8 +43,7 @@ computeBAITpars <- function(model = "20crv3-era5",
                   class = "SpatRaster",
                   unit = "(unit)",
                   description = "Regression parameters for calcHDDCDD"))
-    }
-    else {
+    } else {
       print("BAITpars file not in given cache directory - will be re-calculated.")
     }
   }
@@ -51,12 +51,8 @@ computeBAITpars <- function(model = "20crv3-era5",
 
   # READ-IN DATA----------------------------------------------------------------
 
-  files <- read.csv("inst/extdata/sectoral/BAITpars_fileMapping.csv") %>%
+  files <- read.csv2("inst/extdata/sectoral/BAITpars_fileMapping.csv") %>% # nolint
     filter(.data[["gcm"]] == model)
-
-  # files <- toolGetMapping("BAITpars_fileMapping.csv", type = "sectoral") %>%
-  #   filter(.data[["gcm"]] == model)
-
 
   vars <- c("tas", "sfcwind", "rsds", "huss")
 
@@ -101,7 +97,7 @@ computeBAITpars <- function(model = "20crv3-era5",
     rast()
   # nolint end
 
-  terra::writeCDF(regPars, paste0("/p/tmp/hagento/output/", model, "/baitpars_", model, ".nc"))
+  terra::writeCDF(regPars, paste0("/p/tmp/hagento/output/", model, "/baitpars_", model, ".nc")) # nolint
 
 
   # OUTPUT----------------------------------------------------------------------

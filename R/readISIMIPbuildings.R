@@ -15,6 +15,7 @@
 #' @importFrom stringr str_split
 #' @importFrom terra rast subset aggregate ext res
 #' @importFrom ncdf4 nc_open
+#' @importFrom utils tail
 #'
 #' @note
 #' folder structure in inputdata/sources/ISIMIPbuildings is expected to be:
