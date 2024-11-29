@@ -55,6 +55,7 @@ createSlurm <- function(fileRow,
   tmpDir <- file.path(outDir, "tmp")
   dir.create(tmpDir, recursive = TRUE, showWarnings = FALSE)
   dir.create(config$logsDir, recursive = TRUE, showWarnings = FALSE)
+  dir.create(file.path(outDir, "hddcdd"), recursive = TRUE, showWarnings = FALSE)
 
   # create a unique tag for this batch of files
   batch_tag <- format(Sys.time(), "%Y%m%d_%H%M%S")
@@ -68,8 +69,8 @@ createSlurm <- function(fileRow,
   saveRDS(wBAIT, sprintf("%s/wBAIT_%s.rds", tmpDir, batch_tag))
 
   # output file
-  outputFile <- file.path(outDir,
-                          paste0("result_", fileRow$gcm, "_", fileRow$rcp,
+  outputFile <- file.path(outDir, "hddcdd",
+                          paste0("hddcdd_", fileRow$gcm, "_", fileRow$rcp,
                                  "_", fileRow$start, "-", fileRow$end, ".csv"))
 
   # job name
@@ -172,43 +173,55 @@ createSlurm <- function(fileRow,
 
 waitForSlurm <- function(jobIds, checkInterval = 60, maxWaitTime = 3600) {
   startTime <- Sys.time()
-  jobIds <- as.character(jobIds) # Ensure job IDs are characters for matching
+  jobIds <- as.character(jobIds)
+  jobSet <- unique(jobIds)  # Remove duplicates
 
   while (TRUE) {
-    # Get status of our specific jobs
-    jobs_cmd <- sprintf("sacct -j %s -b -n -P -o jobid,state", paste(jobIds, collapse = ","))
+    # Get detailed job status including job steps
+    jobs_cmd <- sprintf("sacct -j %s --parsable2 --noheader --format=jobid,state",
+                        paste(jobSet, collapse = ","))
     jobs_status <- system(jobs_cmd, intern = TRUE)
 
-    if (length(jobs_status) > 0) {
-      # Split job status into matrix of jobid and state
-      status_matrix <- do.call(rbind, strsplit(jobs_status, "|", fixed = TRUE))
+    if (length(jobs_status) == 0) {
+      stop("No job information found. Check if jobs exist.")
+    }
 
-      # Check for failed jobs
-      failed_states <- c("FAILED", "CANCELLED", "TIMEOUT", "OUT_OF_MEMORY", "NODE_FAIL")
-      failed_jobs <- status_matrix[status_matrix[, 2] %in% failed_states, , drop = FALSE]
+    # Process status data
+    status_matrix <- do.call(rbind, strsplit(jobs_status, "|", fixed = TRUE))
+    parent_jobs <- status_matrix[!grepl("\\.", status_matrix[,1]), , drop = FALSE]
 
-      if (nrow(failed_jobs) > 0) {
-        failed_msg <- paste("Jobs failed:",
+    # Check for failed states
+    failed_states <- c("FAILED", "CANCELLED", "TIMEOUT", "OUT_OF_MEMORY",
+                       "NODE_FAIL", "PREEMPTED", "DEADLINE")
+    failed_jobs <- parent_jobs[parent_jobs[,2] %in% failed_states, , drop = FALSE]
+
+    if (nrow(failed_jobs) > 0) {
+      failed_msg <- sprintf("Jobs failed: %s",
                             paste(sprintf("JobID %s: %s",
-                                          failed_jobs[, 1],
-                                          failed_jobs[, 2]),
+                                          failed_jobs[,1], failed_jobs[,2]),
                                   collapse = ", "))
-        stop(failed_msg)
-      }
+      stop(failed_msg)
+    }
 
-      # Check for active jobs
-      active_states <- c("RUNNING", "PENDING", "COMPLETING", "CONFIGURING")
-      active_jobs <- status_matrix[status_matrix[, 2] %in% active_states, , drop = FALSE]
+    # Check for active states
+    active_states <- c("PENDING", "RUNNING", "COMPLETING", "CONFIGURING",
+                       "SUSPENDED", "REQUEUED", "RESIZING")
+    active_jobs <- parent_jobs[parent_jobs[,2] %in% active_states, , drop = FALSE]
 
-      # If no active jobs and no failures, verify all completed successfully
-      if (nrow(active_jobs) == 0) {
-        completed_states <- c("COMPLETED")
-        completed_jobs <- status_matrix[status_matrix[, 2] %in% completed_states, , drop = FALSE]
-
-        if (nrow(completed_jobs) == length(jobIds)) {
-          message(sprintf("All %d jobs completed successfully", length(jobIds)))
-          return(TRUE)
+    # Verify completion
+    if (nrow(active_jobs) == 0) {
+      completed_jobs <- parent_jobs[parent_jobs[,2] == "COMPLETED", , drop = FALSE]
+      if (nrow(completed_jobs) == length(jobSet)) {
+        message(sprintf("All %d jobs completed successfully", length(jobSet)))
+        return(TRUE)
+      } else {
+        # Some jobs are missing or in unexpected states
+        unknown_jobs <- setdiff(jobSet, parent_jobs[,1])
+        if (length(unknown_jobs) > 0) {
+          stop(sprintf("Jobs with unknown status: %s",
+                       paste(unknown_jobs, collapse = ", ")))
         }
+        stop("Some jobs are in unexpected states. Check sacct manually.")
       }
     }
 
@@ -217,7 +230,6 @@ waitForSlurm <- function(jobIds, checkInterval = 60, maxWaitTime = 3600) {
       stop("Maximum wait time exceeded")
     }
 
-    # Wait before next check
     Sys.sleep(checkInterval)
   }
 }
