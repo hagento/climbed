@@ -1,4 +1,4 @@
-#' Read relevant ISIMIP data for mredgebuildings
+#' Read and pre-process relevant input data
 #'
 #' Relevant data such as region masks, population and relevant climate data are
 #' read in. The relevant file is declared in the subtype with the full file name.
@@ -12,10 +12,10 @@
 #'
 #' @author Hagen Tockhorn
 #'
-#' @importFrom stringr str_split
+#' @importFrom stringr str_split str_detect
 #' @importFrom terra rast subset aggregate ext res
 #' @importFrom ncdf4 nc_open
-#' @importFrom utils tail
+#' @importFrom madrat getConfig
 #'
 #' @note
 #' folder structure in inputdata/sources/ISIMIPbuildings is expected to be:
@@ -23,19 +23,31 @@
 #'    population :    var/scenario
 #'    other :         var/scenario/model
 #'
-#' @note currently, this function only reads data from ISIMIP3b
+#' @note currently, this function only reads data from ISIMIP3a and ISIMIP3b
 
 
-readISIMIPbuildings <- function(subtype) {
+importData <- function(subtype) {
+  # SOURCE DIRECTORY -----------------------------------------------------------
 
-  # PARAMETERS------------------------------------------------------------------
+  # check if source folder exists
+  sourceDir <- getConfig("sourcefolder")
+  if (!dir.exists(sourceDir)) {
+    stop("No madrat source directory found. Please define with `madrat::setConfig(\"sourcefolder\") = ...`")
+  }
+
+  sourceDir <- file.path(sourceDir, "ISIMIPbuildings")
+
+
+
+  # PARAMETERS -----------------------------------------------------------------
 
   baitVars <- c("tas", "sfcwind", "rsds", "huss")
 
   firstHistYear <- 1960
 
 
-  # FUNCTIONS-------------------------------------------------------------------
+
+  # FUNCTIONS ------------------------------------------------------------------
 
   splitSubtype <- function(subtype) {
     vars <- list()
@@ -43,16 +55,12 @@ readISIMIPbuildings <- function(subtype) {
     # nolint start
     if (grepl("countrymask", subtype)) {
       vars[["variable"]] <- "countrymask"
-    }
-
-    else if (grepl("population", subtype)) {
+    } else if (grepl("population", subtype)) {
       subSplit <- str_split(subtype, "_") %>% unlist()
 
       vars[["variable"]] <- subSplit[[1]]
       vars[["scenario"]] <- subSplit[[2]]
-    }
-
-    else if (any(sapply(baitVars, grepl, x = subtype))) {
+    } else if (any(sapply(baitVars, grepl, x = subtype))) {
       subSplit <- str_split(subtype, "_") %>% unlist()
 
       # observations have a shorter file name
@@ -67,7 +75,7 @@ readISIMIPbuildings <- function(subtype) {
       vars[["model"]]    <- subSplit[[1]]
 
       # raster data will be split into individual years
-      if (length(subSplit) > 9) {
+      if (length(subSplit) > 9 || (length(subSplit) > 7 && grepl("obsclim", subtype))) {
         # split index defines the year
         vars[["idx"]] <- gsub(".nc", "", tail(subSplit, 1)) %>%
           as.numeric()
@@ -119,13 +127,33 @@ readISIMIPbuildings <- function(subtype) {
   }
 
 
-  # PROCESS DATA----------------------------------------------------------------
+  # fill dates for unnamed data
+  fillDates <- function(r, filename, pop = FALSE) {
+
+    yStart <- stringr::str_sub(filename, -12, -9)
+    n <- terra::nlyr(r)
+
+    if (!pop) {
+      dStart <- as.Date(paste0(yStart, "-1-1"))
+      dates <- seq.Date(dStart, by = "day", length.out = n)
+    } else {
+      dates <- seq(yStart, by = 1, length.out = n) %>% as.character()
+    }
+
+    # fill dates
+    names(r) <- dates
+    return(r)
+  }
+
+
+
+  # PROCESS DATA ---------------------------------------------------------------
 
   vars <- splitSubtype(subtype)
 
   # region mask
   if (vars[["variable"]] == "countrymask") {
-    fpath     <- file.path("countrymasks", subtype)
+    fpath     <- file.path(sourceDir, "countrymasks", subtype)
     varNames  <- names(nc_open(fpath)[["var"]])
     countries <- list()
 
@@ -136,13 +164,13 @@ readISIMIPbuildings <- function(subtype) {
     r        <- rast(countries)
     names(r) <- gsub("m_", "", varNames)
 
-    x <- list(x = r, class = "SpatRaster")
+    x <- r
   }
 
 
   # population
-  else if (vars[["variable"]] == "population") { #nolint
-    fpath <- file.path(vars[["variable"]], vars[["scenario"]], subtype)
+  else if (vars[["variable"]] == "population") { # nolint
+    fpath <- file.path(sourceDir, vars[["variable"]], vars[["scenario"]], subtype)
 
     if (vars[["scenario"]] == "picontrol") {
       r <- suppressWarnings(rast(fpath))
@@ -164,15 +192,15 @@ readISIMIPbuildings <- function(subtype) {
       r <- aggregate(r, fun = "sum", fact = round(0.5 / res(r), 3))
     }
 
-    x <- list(x = r, class = "SpatRaster", cache = FALSE)
+    x <- r
   }
 
 
   # climate data
-  else if (any(vars[["variable"]] %in% baitVars)) { #nolint
+  else if (any(vars[["variable"]] %in% baitVars)) { # nolint
     # slice single years
     if (!is.null(vars[["yStart"]])) {
-      fpath  <- file.path(vars[["variable"]], vars[["scenario"]], vars[["model"]], vars[["subtype"]])
+      fpath  <- file.path(sourceDir, vars[["variable"]], vars[["scenario"]], vars[["model"]], vars[["subtype"]])
       ranges <- getRanges(vars)
 
       r        <- suppressWarnings(rast(fpath, lyrs = ranges[["idxRange"]]))
@@ -180,15 +208,26 @@ readISIMIPbuildings <- function(subtype) {
     }
 
     # full data set
-    else { #nolint
-      fpath <- file.path(vars[["variable"]], vars[["scenario"]], vars[["model"]], subtype)
+    else { # nolint
+      fpath <- file.path(sourceDir, vars[["variable"]], vars[["scenario"]], vars[["model"]], subtype)
       r <- suppressWarnings(rast(fpath))
     }
 
-    x <- list(x = r, class = "SpatRaster", cache = FALSE)
-  }
+    if (!all(nchar(names(r)) == 10)) {
+      # dates have specific length of n = 10
+      r <- fillDates(r, subtype)
+    }
 
-  else {stop("Subtype was incorrectly split or invalid subtype given.")} #nolint
+    if (vars[["variable"]] == "huss") {
+      # convert kg/kg -> g/kg
+      r <- r * 1e3
+    }
+
+    x <- r
+
+  } else {
+    stop("Subtype was incorrectly split or invalid subtype given.")
+    } # nolint
 
   return(x)
 }

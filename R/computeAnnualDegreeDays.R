@@ -44,7 +44,7 @@ compStackHDDCDD <- function(ftas, tlim, countries, pop, factors, bait,
                             wBAIT = NULL,
                             baitPars = NULL) {
   # read cellular temperature
-  temp <- readSource("ISIMIPbuildings", subtype = ftas, convert = TRUE)
+  temp <- importData(subtype = ftas)
 
   dates <- names(temp)
 
@@ -58,10 +58,10 @@ compStackHDDCDD <- function(ftas, tlim, countries, pop, factors, bait,
       checkDates(tempCelsius)
 
     # calculate bait
-    temp <- compBAIT(baitInput, tempCelsius, weight = wBAIT, params = baitPars)
+    tempBAIT <- compBAIT(baitInput, tempCelsius, weight = wBAIT, params = baitPars)   # [C]
 
     # convert back to [K]
-    temp <- temp + 273.15   # [K]
+    temp <- tempBAIT + 273.15   # [K]
   }
 
   # round and assign dates
@@ -120,8 +120,8 @@ compCellHDDCDD <- function(temp, typeDD, tlim, factors) {
 
   factors <- factors %>%
     filter(.data[["tLim"]] == tlim) %>%
-    dplyr::reframe(from = .data[["T_amb_K"]] - 0.049,
-                   to = .data[["T_amb_K"]] + 0.049,
+    dplyr::reframe(from =    .data[["T_amb_K"]] - 0.049,
+                   to =      .data[["T_amb_K"]] + 0.049,
                    becomes = .data[["factor"]]) %>%
     data.matrix()
 
@@ -152,6 +152,8 @@ compCellHDDCDD <- function(temp, typeDD, tlim, factors) {
 #' @importFrom terra subset global
 
 aggCells <- function(data, weight, mask) {
+  message("Aggregating degree days to regions...")
+
   yearsData   <- names(data)
   yearsWeight <- names(weight)
 

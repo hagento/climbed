@@ -15,7 +15,6 @@
 #' @return named list with read-in or meaned climate data
 #'
 #' @importFrom terra tapp
-#' @importFrom madrat readSource
 
 prepBaitInput <- function(frsds = NULL,
                           fsfc = NULL,
@@ -25,7 +24,7 @@ prepBaitInput <- function(frsds = NULL,
 
   if (isTRUE(fillWithMean)) {
     # optional: calculate daily means over years to fill missing data
-    baitInputMean <- sapply( #nolint
+    baitInputMean <- sapply( # nolint
       names(baitInput),
       function(var) {
         meanData <- tapp(baitInput[[var]],
@@ -37,10 +36,10 @@ prepBaitInput <- function(frsds = NULL,
     )
     return(baitInputMean)
   } else {
-    input <- list( #nolint start
-      "rsds" = readSource("ISIMIPbuildings", subtype = frsds, convert = TRUE),
-      "sfc"  = readSource("ISIMIPbuildings", subtype = fsfc,  convert = TRUE),
-      "huss" = readSource("ISIMIPbuildings", subtype = fhuss, convert = TRUE))
+    input <- list( # nolint start
+      "rsds" = importData(subtype = frsds),
+      "sfc"  = importData(subtype = fsfc),
+      "huss" = importData(subtype = fhuss))
     return(input) # nolint end
   }
 }
@@ -79,8 +78,8 @@ cfac <- function(t, type, params = NULL) {
                 h = {exp(params[[1]] + params[[2]] * t)},
                 t = {params[[1]]},
                 warning("No valid parameter type specified.")
-  )
-  )
+                )
+         )
   # nolint end
 }
 
@@ -96,8 +95,6 @@ cfac <- function(t, type, params = NULL) {
 #' @importFrom terra nlyr
 
 smooth <- function(r, weight) {
-  print("smooth")
-
   # one day indented
   r1D <- r[[c(nlyr(r), 1:(nlyr(r) - 1))]]
   r1D[[1]] <- 0
@@ -130,8 +127,6 @@ smooth <- function(r, weight) {
 #' @return blended raster data
 
 blend <- function(bait, tas, weight) {
-  print("blend")
-
   bBar <- (tas - 0.5 * (weight[["bUpper"]] + weight[["bLower"]])) * 10 / (weight[["bUpper"]] - weight[["bLower"]])
   b    <- weight[["bMax"]] / (1 + exp(-bBar))
 
@@ -173,21 +168,19 @@ compBAIT <- function(baitInput, tasData, weight = NULL, params = NULL) {
                    "bMax"   = 0.5)
   }
 
+  message("Calculating BAIT...")
+
   solar <- baitInput$rsds
   wind  <- baitInput$sfc
   hum   <- baitInput$huss
 
-  print("calc s")
-  s <- solar -  cfac(tasData, type = "s", params = c(params[["aRSDS"]], params[["bRSDS"]]))
-  print("calc w")
-  w <- wind  -  cfac(tasData, type = "w", params = c(params[["aSFC"]], params[["bSFC"]]))
-  print("calc h")
-  h <- hum   -  cfac(tasData, type = "h", params = c(params[["aHUSS"]], params[["bHUSS"]]))
-  print("calc t")
+  # calculate respective summands
+  s <- solar   - cfac(tasData, type = "s", params = c(params[["aRSDS"]], params[["bRSDS"]]))
+  w <- wind    - cfac(tasData, type = "w", params = c(params[["aSFC"]],  params[["bSFC"]]))
+  h <- hum     - cfac(tasData, type = "h", params = c(params[["aHUSS"]], params[["bHUSS"]]))
   t <- tasData - cfac(tasData, type = "t", params = NULL)
 
   # calc bait
-  print("calc bait")
   bait <- tasData + weight[["wRSDS"]] * s + weight[["wSFC"]] * w + weight[["wHUSS"]] * h * t
 
   # smooth bait
