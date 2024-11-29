@@ -33,7 +33,8 @@
 #' @importFrom stats dnorm
 #' @importFrom pracma integral2
 
-compDegDayFactors <- function(tLow, tUp, tLim, tAmbStd = 2, tLimStd = 2) {
+compFactors <- function(tLow, tUp, tLim, tAmbStd = 2, tLimStd = 2) {
+
   # t1 : ambient temperature variable
   # t2 : limit temperature variable
 

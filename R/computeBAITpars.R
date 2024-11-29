@@ -27,21 +27,21 @@
 
 
 computeBAITpars <- function(model = "20crv3-era5",
-                            cacheDir = NULL) {
+                            cacheDir = "intdata/BAITpars") {
   # CHECK CACHE-----------------------------------------------------------------
 
+  # absolut package path
+  pkgPath <- getSystemFile(package = "climbed")
+
   if (!is.null(cacheDir)) {
-    fpath <- list.files(cacheDir, pattern = model, full.names = TRUE) %>%
+    fpath <- list.files(file.path(pkgPath, cacheDir), pattern = model, full.names = TRUE) %>%
       unlist()
 
     if (file.exists(fpath)) {
       print(paste0("Load parameters from cache: ", basename(fpath)))
       regPars <- rast(fpath)
 
-      return(list(x = regPars,
-                  class = "SpatRaster",
-                  unit = "(unit)",
-                  description = "Regression parameters for calcHDDCDD"))
+      return(regPars)
     } else {
       print("BAITpars file not in given cache directory - will be re-calculated.")
     }
