@@ -1,6 +1,6 @@
 # Climate Data Integration for Modeling Building Energy Demand
 
-R package **climbed**, version **0.1.0.9001**
+R package **climbed**, version **0.1.0.9002**
 
 [![CRAN status](https://www.r-pkg.org/badges/version/climbed)](https://cran.r-project.org/package=climbed)  [![R build status](https://github.com/hagento/climbed/workflows/check/badge.svg)](https://github.com/hagento/climbed/actions) [![codecov](https://codecov.io/gh/hagento/climbed/branch/master/graph/badge.svg)](https://app.codecov.io/gh/hagento/climbed) 
 
@@ -38,7 +38,7 @@ In case of questions / problems please contact Hagen Tockhorn <hagento@pik-potsd
 
 To cite package **climbed** in publications use:
 
-Tockhorn H (2024). _climbed: Climate Data Integration for Modeling Building Energy Demand_. R package version 0.1.0.9001.
+Tockhorn H (2024). _climbed: Climate Data Integration for Modeling Building Energy Demand_. R package version 0.1.0.9002.
 
 A BibTeX entry for LaTeX users is
 
@@ -47,6 +47,6 @@ A BibTeX entry for LaTeX users is
   title = {climbed: Climate Data Integration for Modeling Building Energy Demand},
   author = {Hagen Tockhorn},
   year = {2024},
-  note = {R package version 0.1.0.9001},
+  note = {R package version 0.1.0.9002},
 }
 ```

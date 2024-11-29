@@ -10,3 +10,6 @@
 ^codecov\.yml$
 ^\.github$
 ^.*CITATION.cff$
+^inst/intdata/BAITpars/
+^output/
+
