@@ -38,37 +38,43 @@ initCalculation <- function(fileMapping,
                             ssp,
                             bait,
                             tLim,
-                            countries,
                             hddcddFactor,
                             wBAIT = NULL,
                             baitPars = NULL) {
-  
-  # define gsub function that handles NULL values in our favor
-  nullGsub <- function(pattern, replacement, x) {
-    if (!is.null(x)) gsub(pattern, replacement, x) else NULL
-  }
-  
   # extract filenames
   ftas  <- fileMapping[["tas"]]
   frsds <- if (bait) fileMapping[["rsds"]]    else NULL
   fsfc  <- if (bait) fileMapping[["sfcwind"]] else NULL
   fhuss <- if (bait) fileMapping[["huss"]]    else NULL
-  
+
   # extract temporal interval
   yStart <- fileMapping[["start"]] %>% as.numeric()
   yEnd   <- fileMapping[["end"]] %>% as.numeric()
-  
+
   # extract RCP scenario + model
   rcp   <- fileMapping[["rcp"]] %>% unique()
   model <- fileMapping[["gcm"]] %>% unique()
-  
-  
+
+
+  # read country masks
+  countries <- importData(subtype = "countrymasks-fractional_30arcmin.nc")
+
+
+  if (bait) {
+    # bait regression parameters
+    baitPars <- computeBAITpars(model = unique(fileMapping$gcm))
+    names(baitPars) <- c("aRSDS", "bRSDS", "aSFC", "bSFC", "aHUSS", "bHUSS") # TODO: change this
+  }
+
+
   # loop over single years and compute annual degree days
   hddcdd <- do.call(
     "rbind",
     lapply(
       seq(1, yEnd - yStart + 1),
       function(i) {
+        message("Initiating calculating degree days for the year: ", seq(yStart, yEnd)[[i]])
+
         compStackHDDCDD(ftas  = gsub(".nc", paste0("_", i, ".nc"), ftas),
                         frsds = if (bait) gsub(".nc", paste0("_", i, ".nc"), frsds) else NULL,
                         fsfc  = if (bait) gsub(".nc", paste0("_", i, ".nc"), fsfc)  else NULL,
@@ -83,12 +89,12 @@ initCalculation <- function(fileMapping,
       }
     )
   )
-  
+
   hddcdd <- hddcdd %>%
     mutate("model" = model,
            "ssp" = ssp,
            "rcp" = rcp)
-  
+
   return(hddcdd)
 }
 
@@ -131,9 +137,8 @@ compStackHDDCDD <- function(ftas, tlim, countries, pop, factors, bait,
                             fhuss = NULL,
                             wBAIT = NULL,
                             baitPars = NULL) {
-
   # read cellular temperature
-  temp <- readSource("ISIMIPbuildings", subtype = ftas, convert = TRUE)
+  temp <- importData(subtype = ftas)
 
   dates <- names(temp)
 
@@ -147,10 +152,10 @@ compStackHDDCDD <- function(ftas, tlim, countries, pop, factors, bait,
       checkDates(tempCelsius)
 
     # calculate bait
-    temp <- compBAIT(baitInput, tempCelsius, weight = wBAIT, params = baitPars)
+    tempBAIT <- compBAIT(baitInput, tempCelsius, weight = wBAIT, params = baitPars)   # [C]
 
     # convert back to [K]
-    temp <- temp + 273.15   # [K]
+    temp <- tempBAIT + 273.15   # [K]
   }
 
   # round and assign dates
@@ -180,8 +185,6 @@ compStackHDDCDD <- function(ftas, tlim, countries, pop, factors, bait,
     )
   )
 
-  rm(tasData, baitInput, temp)
-
   return(hddcdd)
 }
 
@@ -199,6 +202,7 @@ compStackHDDCDD <- function(ftas, tlim, countries, pop, factors, bait,
 #' @author Hagen Tockhorn
 #'
 #' @importFrom terra classify tapp
+#' @importFrom dplyr .data
 
 compCellHDDCDD <- function(temp, typeDD, tlim, factors) {
   # extract years
@@ -209,8 +213,8 @@ compCellHDDCDD <- function(temp, typeDD, tlim, factors) {
 
   factors <- factors %>%
     filter(.data[["tLim"]] == tlim) %>%
-    dplyr::reframe(from = .data[["T_amb_K"]] - 0.049,
-                   to = .data[["T_amb_K"]] + 0.049,
+    dplyr::reframe(from =    .data[["T_amb_K"]] - 0.049,
+                   to =      .data[["T_amb_K"]] + 0.049,
                    becomes = .data[["factor"]]) %>%
     data.matrix()
 
@@ -241,6 +245,8 @@ compCellHDDCDD <- function(temp, typeDD, tlim, factors) {
 #' @importFrom terra subset
 
 aggCells <- function(data, weight, mask) {
+  message("Aggregating degree days to regions...")
+
   yearsData   <- names(data)
   yearsWeight <- names(weight)
 
@@ -276,4 +282,3 @@ aggCells <- function(data, weight, mask) {
   )
   return(hddcddAgg)
 }
-
