@@ -12,61 +12,51 @@
 checkDates <- function(baitInput, tasData) {
   datesT <- names(tasData)
 
-  baitInput <- sapply(names(baitInput), function(var) { # nolint
-    # fill missing data with means from previous years
-    # NOTE: "temp" and "baitInput" have the same global temporal lower
-    #       boundary, since "temp" is the constraining dataset, only
-    #       "baitInput" needs to be filled up.
+  baitInput <- vapply(
+    names(baitInput),
+    function(var) {
+      # Fill missing data with means from previous years
+      baitLayer <- baitInput[[var]]
+      datesBait <- names(baitLayer)
 
-    tmp <- baitInput[[var]]
+      # Determine dates to fill and keep
+      datesFill <- setdiff(datesT, datesBait) # Dates to fill up
+      datesKeep <- intersect(datesBait, datesT) # Dates to keep
+      daysFill  <- unique(substr(datesFill, 6, 11))
 
-    datesBait <- names(tmp)
-
-    datesFill <- setdiff(datesT, datesBait)        # dates to fill up
-    daysFill  <- unique(substr(datesFill, 6, 11))
-
-    datesKeep <- intersect(datesBait, datesT)      # dates to keep
-    keep      <- length(datesKeep) > 0
-
-    if (keep) {
-      tmp        <- subset(tmp, datesKeep)
-      names(tmp) <- datesKeep
-    }
-
-    if (length(daysFill) > 0) {
-      baitInputMean <- prepBaitInput(fillWithMean = TRUE, baitInput = baitInput)
-
-      # fill up missing dates with yearly-average value for specific day/cell
-      baitInputFill <- rast(
-        lapply(
-          daysFill,
-          function(d) {
-            idx <- which(grepl(d, stringr::str_sub(datesFill, -5, -1)))
-            r   <- rast(replicate(length(idx), baitInputMean[[var]][[d]]))
-            names(r) <- datesFill[idx]
-            return(r)
-          }
-        )
-      )
-
-      # concatenate data
-      if (keep) {
-        tmp <- rast(list(tmp, baitInputFill))
-      } else {
-        tmp <- baitInputFill
+      # Subset to dates that are present
+      if (length(datesKeep) > 0) {
+        baitLayer <- subset(baitLayer, datesKeep)
+        names(baitLayer) <- datesKeep
       }
 
-      # re-order dates
-      tmp <- rast(tmp[[order(names(tmp))]])
-    }
+      # Fill missing dates with yearly-average values
+      if (length(daysFill) > 0) {
+        baitInputMean <- prepBaitInput(fillWithMean = TRUE, baitInput = baitInput)
+        baitFill <- rast(lapply(daysFill, function(d) {
+          idx <- which(grepl(d, substr(datesFill, 6, 11)))
+          r <- rast(replicate(length(idx), baitInputMean[[var]][[d]]))
+          names(r) <- datesFill[idx]
+          r
+        }))
 
+        # Combine existing and filled data
+        baitLayer <- if (length(datesKeep) > 0) rast(list(baitLayer, baitFill)) else baitFill
 
-    if (!identical(names(tmp), names(tasData))) {
-      warning("Dates of Temperature and BAIT Input Data are not aligned.")
-    }
-    return(tmp)
-  },
-  USE.NAMES = TRUE
+        # Reorder dates
+        baitLayer <- rast(baitLayer[[order(names(baitLayer))]])
+      }
+
+      # Alignment check
+      if (!identical(names(baitLayer), names(tasData))) {
+        warning("Dates of Temperature and BAIT Input Data are not aligned.")
+      }
+
+      baitLayer
+    },
+    FUN.VALUE = rast(),
+    USE.NAMES = TRUE
   )
+
   return(baitInput)
 }

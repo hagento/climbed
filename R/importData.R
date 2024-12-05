@@ -1,14 +1,29 @@
-#' Read and pre-process relevant input data
+#' Read and Pre-process Input Data
 #'
-#' Relevant data such as region masks, population and relevant climate data are
-#' read in. The relevant file is declared in the subtype with the full file name.
+#' Reads and processes input data such as region masks, population, and climate data.
+#' The file to process is specified via \code{subtype}, which includes the full file name.
 #'
-#' If the file name includes a suffix in the form of an integer such as
-#' \code{_<int>.filetype}, the file is split into a single year period, e.g.
-#' \code{<filename>_2001_2010_2.nc} will return data for the second year of the
-#' 2001-2010 period, here 2002.
+#' Files with suffixes in the format \code{_<int>.filetype} are split by year.
+#' For example, \code{<filename>_2001_2010_2.nc} returns data for 2002 (the second year in the range).
 #'
-#' @param subtype filename
+#' @param subtype Character string specifying the file name.
+#'
+#' @return Pre-processed dataset based on \code{subtype}.
+#'
+#' @details
+#' The function supports data from ISIMIP3a and ISIMIP3b. It expects the following folder structure
+#' under the base directory \code{inputdata/sources/ISIMIPbuildings}:
+#' \itemize{
+#'   \item \strong{Country masks}: \code{inputdata/sources/ISIMIPbuildings/countrymasks/}
+#'   \item \strong{Population data}: \code{inputdata/sources/ISIMIPbuildings/population/<scenario>/}
+#'   \item \strong{Other data (e.g., tas, sfcwind)}:
+#'   \code{inputdata/sources/ISIMIPbuildings/otherdata/<scenario>/<model>/}
+#' }
+#'
+#' Note that \code{<scenario>} and \code{<model>} are placeholders that need to be replaced
+#' with the actual scenario and model names provided as part of the dataset.
+#'
+#' Ensure that the directory structure matches this expected format to avoid errors.
 #'
 #' @author Hagen Tockhorn
 #'
@@ -18,13 +33,9 @@
 #' @importFrom madrat getConfig
 #' @importFrom utils tail
 #'
-#' @note
-#' folder structure in inputdata/sources/ISIMIPbuildings is expected to be:
-#'    country masks : var/
-#'    population :    var/scenario
-#'    other :         var/scenario/model
-#'
-#' @note currently, this function only reads data from ISIMIP3a and ISIMIP3b
+#' @note The folder structure and correct placeholders for \code{<scenario>} and
+#' \code{<model>} are crucial for successful data loading.
+
 
 
 importData <- function(subtype) {
@@ -53,7 +64,6 @@ importData <- function(subtype) {
   splitSubtype <- function(subtype) {
     vars <- list()
 
-    # nolint start
     if (grepl("countrymask", subtype)) {
       vars[["variable"]] <- "countrymask"
     } else if (grepl("population", subtype)) {
@@ -61,7 +71,7 @@ importData <- function(subtype) {
 
       vars[["variable"]] <- subSplit[[1]]
       vars[["scenario"]] <- subSplit[[2]]
-    } else if (any(sapply(baitVars, grepl, x = subtype))) {
+    } else if (any(vapply(baitVars, grepl, logical(1), x = subtype))) {
       subSplit <- str_split(subtype, "_") %>% unlist()
 
       # observations have a shorter file name
@@ -100,9 +110,8 @@ importData <- function(subtype) {
         vars[["subtype"]] <- sub("_(1[0-9]|\\d)\\.nc$", ".nc", subtype)
       }
     } else {
-        stop("Invalid subtype given.")
-      }
-    # nolint end
+      stop("Invalid subtype given.")
+    }
 
     return(vars)
   }
@@ -138,7 +147,8 @@ importData <- function(subtype) {
       dStart <- as.Date(paste0(yStart, "-1-1"))
       dates <- seq.Date(dStart, by = "day", length.out = n)
     } else {
-      dates <- seq(yStart, by = 1, length.out = n) %>% as.character()
+      dates <- seq(yStart, by = 1, length.out = n) %>%
+        as.character()
     }
 
     # fill dates
@@ -166,11 +176,8 @@ importData <- function(subtype) {
     names(r) <- gsub("m_", "", varNames)
 
     x <- r
-  }
 
-
-  # population
-  else if (vars[["variable"]] == "population") { # nolint
+  } else if (vars[["variable"]] == "population") {
     fpath <- file.path(sourceDir, vars[["variable"]], vars[["scenario"]], subtype)
 
     if (vars[["scenario"]] == "picontrol") {
@@ -194,11 +201,8 @@ importData <- function(subtype) {
     }
 
     x <- r
-  }
 
-
-  # climate data
-  else if (any(vars[["variable"]] %in% baitVars)) { # nolint
+  } else if (any(vars[["variable"]] %in% baitVars)) {
     # slice single years
     if (!is.null(vars[["yStart"]])) {
       fpath  <- file.path(sourceDir, vars[["variable"]], vars[["scenario"]], vars[["model"]], vars[["subtype"]])
@@ -206,10 +210,8 @@ importData <- function(subtype) {
 
       r        <- suppressWarnings(rast(fpath, lyrs = ranges[["idxRange"]]))
       names(r) <- ranges[["yRange"]]
-    }
 
-    # full data set
-    else { # nolint
+    } else {
       fpath <- file.path(sourceDir, vars[["variable"]], vars[["scenario"]], vars[["model"]], subtype)
       r <- suppressWarnings(rast(fpath))
     }
@@ -228,7 +230,7 @@ importData <- function(subtype) {
 
   } else {
     stop("Subtype was incorrectly split or invalid subtype given.")
-    } # nolint
+  }
 
   return(x)
 }

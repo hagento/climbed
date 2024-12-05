@@ -1,20 +1,21 @@
-# --- FUNCTIONS TO CALCULATE BIAS-ADJUSTED INTERNAL TEMPERATURE ----------------
-
-
-
-#' Read in necessary climate data to calculate BAIT or calculate mean values of
-#' said climate data to fill missing data in case of temporal mismatch between
-#' near-surface atmospherical temperature and other considered climate data.
+#' Read and Process Climate Data for BAIT Calculation or Data Imputation
 #'
-#' @param frsds file path to raster data on surface downdwelling shortwave radiation
-#' @param fsfc file path to raster data on near-surface wind speed
-#' @param fhuss file path to raster data on near-surface specific humidity
-#' @param baitInput named list of climate data
-#' @param fillWithMean boolean, only mean is calculated and returned
+#' This function reads the necessary climate data to calculate BAIT (Bias-Adjusted Internal Temperature)
+#' or computes mean values of the specified climate variables to impute missing data.
+#' Imputation is used in cases where there is a temporal mismatch between near-surface atmospheric temperature
+#' data and other climate variables.
 #'
-#' @return named list with read-in or meaned climate data
+#' @param frsds Character string specifying the file path to raster data on surface downwelling shortwave radiation.
+#' @param fsfc Character string specifying the file path to raster data on near-surface wind speed.
+#' @param fhuss Character string specifying the file path to raster data on near-surface specific humidity.
+#' @param baitInput Named list containing climate data inputs for BAIT calculation.
+#' @param fillWithMean Logical; if \code{TRUE}, the function calculates and returns the mean of the climate data
+#' instead of the raw data.
+#'
+#' @return A named list containing either the read-in climate data or the computed mean values of the data.
 #'
 #' @importFrom terra tapp
+#' @importFrom stats setNames
 
 prepBaitInput <- function(frsds = NULL,
                           fsfc = NULL,
@@ -24,23 +25,24 @@ prepBaitInput <- function(frsds = NULL,
 
   if (isTRUE(fillWithMean)) {
     # optional: calculate daily means over years to fill missing data
-    baitInputMean <- sapply( # nolint
+    baitInputMean <- setNames(vapply(
       names(baitInput),
       function(var) {
         meanData <- tapp(baitInput[[var]],
                          unique(substr(names(baitInput[[var]]), 6, 11)),
                          fun = "mean")
-        names(meanData) <- gsub("\\.", "-", substr(names(mean), 2, 6))
-        return(meanData)
-      }
-    )
+        names(meanData) <- gsub("\\.", "-", substr(names(meanData), 2, 6))
+        meanData
+      },
+      FUN.VALUE = rast()
+    ), names(baitInput))
+
     return(baitInputMean)
   } else {
-    input <- list( # nolint start
-      "rsds" = importData(subtype = frsds),
-      "sfc"  = importData(subtype = fsfc),
-      "huss" = importData(subtype = fhuss))
-    return(input) # nolint end
+    input <- list("rsds" = importData(subtype = frsds),
+                  "sfc"  = importData(subtype = fsfc),
+                  "huss" = importData(subtype = fhuss))
+    return(input)
   }
 }
 
@@ -60,7 +62,7 @@ prepBaitInput <- function(frsds = NULL,
 #' @param type considered climate variable
 #' @param params regression parameters as vector or raster object
 #'
-#' @return counterfactuals for respective climate variable
+#' @returns counterfactuals for respective climate variable
 
 cfac <- function(t, type, params = NULL) {
   if (is.null(params)) {
@@ -71,16 +73,12 @@ cfac <- function(t, type, params = NULL) {
                      t = c(16))
   }
 
-  # nolint start
   return(switch(type,
-                s = {params[[1]] + params[[2]] * t},
-                w = {params[[1]] + params[[2]] * t},
-                h = {exp(params[[1]] + params[[2]] * t)},
-                t = {params[[1]]},
-                warning("No valid parameter type specified.")
-                )
-         )
-  # nolint end
+                s = params[[1]] + params[[2]] * t,
+                w = params[[1]] + params[[2]] * t,
+                h = exp(params[[1]] + params[[2]] * t),
+                t = params[[1]],
+                warning("No valid parameter type specified.")))
 }
 
 
@@ -90,7 +88,7 @@ cfac <- function(t, type, params = NULL) {
 #' @param r raster data to be smoothed
 #' @param weight named list with smoothing parameter sig
 #'
-#' @return smoothed raster data
+#' @returns smoothed raster data
 #'
 #' @importFrom terra nlyr
 
@@ -127,7 +125,7 @@ smooth <- function(r, weight) {
 #' @return blended raster data
 
 blend <- function(bait, tas, weight) {
-  bBar <- (tas - 0.5 * (weight[["bUpper"]] + weight[["bLower"]])) * 10 / (weight[["bUpper"]] - weight[["bLower"]])
+  bBar <- (tas - mean(weight[c("bUpper", "bLower")])) * 10 / (weight[["bUpper"]] - weight[["bLower"]])
   b    <- weight[["bMax"]] / (1 + exp(-bBar))
 
   blend <- bait * (1 - b) + (tas * b)
@@ -154,7 +152,7 @@ blend <- function(bait, tas, weight) {
 #' @param weight named list with weights
 #' @param params optional named list with regression parameters from calcBAITpars
 #'
-#' @return raster object with BAIT values
+#' @returns raster object with BAIT values
 
 compBAIT <- function(baitInput, tasData, weight = NULL, params = NULL) {
   if (is.null(weight)) {
@@ -186,7 +184,7 @@ compBAIT <- function(baitInput, tasData, weight = NULL, params = NULL) {
   # smooth bait
   bait <- smooth(bait, weight)
 
-  # # blend bait
+  # blend bait
   bait <- blend(bait, tasData, weight)
 
   return(bait)

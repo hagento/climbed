@@ -14,7 +14,7 @@
 #' @param cacheDir Character string specifying the directory containing pre-calculated
 #' function outputs.
 #'
-#' @return A `terra::SpatRaster` object with layers representing regression
+#' @returns A \code{terra::SpatRaster} object with layers representing regression
 #' parameters for each cell.
 #'
 #' @author Hagen Tockhorn
@@ -23,12 +23,12 @@
 #' @importFrom madrat toolGetMapping readSource
 #' @importFrom magclass as.magpie
 #' @importFrom utils read.csv2
+#' @importFrom piamutils getSystemFile
 
 
 
 computeBAITpars <- function(model = "20crv3-era5",
                             cacheDir = NULL) {
-
   # CHECK CACHE-----------------------------------------------------------------
 
   if (!is.null(cacheDir)) {
@@ -51,24 +51,21 @@ computeBAITpars <- function(model = "20crv3-era5",
 
   # READ-IN DATA----------------------------------------------------------------
 
-  files <- read.csv2("inst/extdata/sectoral/BAITpars_fileMapping.csv") %>% # nolint
+  files <- read.csv2(getSystemFile("extdata", "sectoral", "BAITpars_fileMapping.csv", package = "climbed")) %>%
     filter(.data[["gcm"]] == model)
 
   vars <- c("tas", "sfcwind", "rsds", "huss")
 
-  # nolint start
-  data <- sapply(vars, function(v) {
-    tmp <- sapply(files[[v]],
-                  function(f) {
-                    return(readSource("ISIMIPbuildings", subtype = f))
-                  },
-                  USE.NAMES = FALSE) %>%
-      rast()
-
-    return(tmp)
-  },
-  USE.NAMES = TRUE)
-  # nolint end
+  data <- vapply(
+    vars,
+    function(v) {
+      tmp <- rast(vapply(files[[v]], function(f) importData(subtype = f),
+                         FUN.VALUE = list(), USE.NAMES = FALSE))
+      tmp
+    },
+    FUN.VALUE = rast(),
+    USE.NAMES = TRUE
+  )
 
   print("Reading completed")
 
