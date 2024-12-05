@@ -168,8 +168,6 @@ compBAIT <- function(baitInput, tasData, weight = NULL, params = NULL) {
                    "bMax"   = 0.5)
   }
 
-  message("Calculating BAIT...")
-
   solar <- baitInput$rsds
   wind  <- baitInput$sfc
   hum   <- baitInput$huss

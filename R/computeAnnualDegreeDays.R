@@ -39,8 +39,7 @@ initCalculation <- function(fileMapping,
                             bait,
                             tLim,
                             hddcddFactor,
-                            wBAIT = NULL,
-                            baitPars = NULL) {
+                            wBAIT = NULL) {
   # extract filenames
   ftas  <- fileMapping[["tas"]]
   frsds <- if (bait) fileMapping[["rsds"]]    else NULL
@@ -245,7 +244,6 @@ compCellHDDCDD <- function(temp, typeDD, tlim, factors) {
 #' @importFrom terra subset
 
 aggCells <- function(data, weight, mask) {
-  message("Aggregating degree days to regions...")
 
   yearsData   <- names(data)
   yearsWeight <- names(weight)

@@ -13,9 +13,8 @@
 #'
 #' @author Hagen Tockhorn
 #'
-#' @import dplyr ungroup group_by across all_of mutate rowwise reframe filter
+#' @importFrom dplyr ungroup group_by across all_of mutate rowwise reframe filter
 #' left_join select case_when
-#' @importFrom stats lowpass
 #' @importFrom magclass lowpass
 
 smoothDegreeDays <- function(data, nSmoothIter = 50, transitionYears = 10) {
@@ -23,7 +22,7 @@ smoothDegreeDays <- function(data, nSmoothIter = 50, transitionYears = 10) {
   # PARAMETERS -----------------------------------------------------------------
 
   # upper temporal threshold for historical data points
-  endOfHistory <- 2014
+  endOfHistory <- 2020
 
 
 
@@ -41,7 +40,7 @@ smoothDegreeDays <- function(data, nSmoothIter = 50, transitionYears = 10) {
 
     # take mean over models
     group_by(across(-all_of(c("model", "value")))) %>%
-    reframe(value = mean(.data[["value"]]), .groups = "drop")
+    reframe(value = mean(.data[["value"]]))
 
 
 
@@ -49,16 +48,25 @@ smoothDegreeDays <- function(data, nSmoothIter = 50, transitionYears = 10) {
   lastHistValues <- dataSmooth %>%
     filter(period == endOfHistory, !is.na(.data[["value"]])) %>%
     group_by(across(all_of(c("region", "variable")))) %>%
-    reframe(lastHistValue = mean(.data[["value"]], na.rm = TRUE), .groups = "drop")
+    reframe(lastHistValue = mean(.data[["value"]], na.rm = TRUE))
+
+  # filter data w.r.t. periods
+  dataSmooth <- rbind(dataSmooth %>%
+                        filter(.data[["rcp"]] == "historical",
+                               .data[["period"]] <= endOfHistory),
+                      dataSmooth %>%
+                        filter(.data[["rcp"]] != "historical",
+                               .data[["period"]] >= endOfHistory))
 
 
   # smooth transition between last historical value and projections to minimize
   # deviations caused by the preceding smoothing
   dataSmooth <- dataSmooth %>%
-    left_join(lastHistValues) %>%
+    left_join(lastHistValues,
+              by = c("region", "variable")) %>%
     mutate(
       value = case_when(
-        .data[["period"]] > endOfHistory &
+        .data[["period"]] >= endOfHistory &
           .data[["period"]] <= (endOfHistory + transitionYears) &
           rcp != "picontrol" & !is.na(.data[["lastHistValue"]]) & !is.na(.data[["value"]]) ~
           .data[["lastHistValue"]] + (.data[["value"]] - .data[["lastHistValue"]]) *
@@ -67,6 +75,9 @@ smoothDegreeDays <- function(data, nSmoothIter = 50, transitionYears = 10) {
       )
     ) %>%
     select(-"lastHistValue")
+
+
+  # filter
 
   return(dataSmooth)
 }
