@@ -13,8 +13,10 @@
 #' Searches for files matching pattern: "hddcdd_[gcm]_[rcp]_[start]-[end].csv"
 #' in the "hddcdd" subdirectory of \code{outDir}.
 #'
-#' @import dplyr select
+#' @importFrom dplyr select
 #' @importFrom utils read.csv
+#'
+#' @export
 
 gatherData <- function(fileMapping,
                        outDir) {
@@ -32,7 +34,7 @@ gatherData <- function(fileMapping,
 
     # create pattern
     pattern <- paste0(
-      "hddcdd_", df$gcm[i], "_", df$rcp[i], "_", df$start[i], "-", df$end[i], "\\.csv$"
+      "hddcdd_", fileMapping$gcm[i], "_", fileMapping$rcp[i], "_", fileMapping$start[i], "-", fileMapping$end[i], "\\.csv$"
     )
 
     # find files matching the pattern in the directory

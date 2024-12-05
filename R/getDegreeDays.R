@@ -11,11 +11,26 @@
 #' individually defined and submitted SLURM job. After successful completion, the job
 #' outputs are gathered, post-processed and saved as a .csv file in the \code{output} folder.
 #'
-#' @param mappingFile A string specifying the path to the mapping file containing information about the climate data
-#' Must include columns like \code{"gcm"}, \code{"rcp"}, \code{"start"}, \code{"end"}, \code{"tas"}, \code{"rsds"},
-#' \code{"sfcwind"} and \code{"huss"}.
+#' @param mappingFile A string specifying the path to the mapping file containing information about the climate data.
+#' The file must include the following columns:
+#'   \describe{
+#'     \item{\code{"gcm"}}{The General Circulation Model (GCM) name of the dataset.}
+#'     \item{\code{"rcp"}}{The RCP scenario.}
+#'     \item{\code{"start"}}{The starting year of the time period.}
+#'     \item{\code{"end"}}{The ending year of the time period.}
+#'     \item{\code{"tas"}}{The filename of the near-surface air temperature data. Needs
+#'     to exist in the \code{"ISIMIPbuildings"} directory within your madrat \code{"sourcefolder"}.}
+#'     \item{\code{"rsds"}}{The filename of the near-surface air temperature data. Needs
+#'     to exist in the \code{"ISIMIPbuildings"} directory within your madrat \code{"sourcefolder"}.}
+#'     \item{\code{"sfcwind"}}{The filename of the near-surface wind speed data. Needs
+#'     to exist in the \code{"ISIMIPbuildings"} directory within your madrat \code{"sourcefolder"}.}
+#'     \item{\code{"huss"}}{The filename of the near-surface relative humidity data. Needs
+#'     to exist in the \code{"ISIMIPbuildings"} directory within your madrat \code{"sourcefolder"}.}
+#'   }
+#'
 #' @param bait Logical. If \code{TRUE}, bias-adjusted internal temperature (BAIT)
 #' is included in the calculations. Defaults to \code{TRUE}.
+#'
 #' @param tLim A list defining temperature limits for HDD and CDD calculations.
 #' Defaults to \code{list("HDD" = seq(9, 19), "CDD" = seq(15, 25))}.
 #' @param std A named vector of standardization parameters for temperature limits and ambient temperatures.
@@ -35,6 +50,7 @@
 #' @importFrom utils read.csv
 #' @importFrom stats setNames
 #' @importFrom piamutils getSystemFile
+#' @importFrom fs is_absolute_path
 #'
 #' @export
 
@@ -177,7 +193,6 @@ getDegreeDays <- function(mappingFile = NULL,
 
     # submit jobs and collect job details
     for (i in seq(1, nrow(files))) {
-      message("\nSubmitting job ", i, " of ", nrow(files))
       tryCatch(
         {
           job <- createSlurm(fileRow = files[i, ],
@@ -210,10 +225,35 @@ getDegreeDays <- function(mappingFile = NULL,
   # extract all job IDs
   jobIds <- lapply(allJobs, function(x) x$jobId)
 
-  # wait for our specific jobs to complete (max. 12hrs)
-  waitForSlurm(jobIds, maxWaitTime = 12 * 60 * 60)
+  # wait for our specific jobs to complete (max. 6hrs)
+  waitForSlurm(jobIds, maxWaitTime = 6 * 60 * 60)
 
 
 
-  # now gather all jobs and do some further processing ...
+  # --- GATHER AND SMOOTH DEGREE DAYS
+
+  # gather outputs from slurm jobs
+  data <- gatherData(fileMapping = fileMapping, outDir = outDir)
+
+  # smooth degree days
+  dataSmooth <- smoothDegreeDays(data, nSmoothIter = 50, transitionYears = 5)
+
+
+
+
+  # OUTPUT ---------------------------------------------------------------------
+
+  fileName <- "hddcdd"
+
+  if(is.character(fileRev)) {
+    fileName <- paste0(fileName, "_", fileRev)
+  } else if(!is.null(fileRev)) {
+    warning("fileRev must be character")
+  }
+
+  outPath <- file.path(outDir, paste0(fileName, ".csv"))
+
+  write.csv(dataSmooth, outPath)
+
+
 }

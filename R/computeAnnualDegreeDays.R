@@ -245,7 +245,6 @@ compCellHDDCDD <- function(temp, typeDD, tlim, factors) {
 #' @importFrom terra subset global
 
 aggCells <- function(data, weight, mask) {
-  message("Aggregating degree days to regions...")
 
   yearsData   <- names(data)
   yearsWeight <- names(weight)
