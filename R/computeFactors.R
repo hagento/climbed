@@ -20,13 +20,13 @@
 #' changes to a curved function that is above zero even if the mean of \code{T_ambient_day}
 #' is above the mean of \code{tLimit}.
 #'
-#' @param tLow lower temperature boundary
-#' @param tUp upper temperature boundary
-#' @param tLim named list of limit temperature sequences for \code{HDD} and \code{CDD}
-#' @param tAmbStd std of ambient temperature
-#' @param tLimStd std of limit temperature
+#' @param tLow \code{numeric} lower temperature boundary.
+#' @param tUp \code{numeric} upper temperature boundary.
+#' @param tLim \code{list} named list of limit temperature sequences for \code{HDD} and \code{CDD}.
+#' @param tAmbStd \code{numeric} standard deviation of ambient temperature.
+#' @param tLimStd \code{numeric} standard deviation of limit temperature.
 #'
-#' @returns data frame of HDD/CDD values
+#' @return \code{data.frame} containing calculated HDD and CDD values.
 #'
 #' @author Hagen Tockhorn
 #'

@@ -6,7 +6,7 @@
 #' Files with suffixes in the format \code{_<int>.filetype} are split by year.
 #' For example, \code{<filename>_2001_2010_2.nc} returns data for 2002 (the second year in the range).
 #'
-#' @param subtype Character string specifying the file name.
+#' @param subtype \code{character} string specifying the file name.
 #'
 #' @return Pre-processed dataset based on \code{subtype}.
 #'

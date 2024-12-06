@@ -10,12 +10,11 @@
 #' is assumed, while for huss, an exponential relationship is adopted, reflecting
 #' the non-linear dependence of water vapor pressure on temperature.
 #'
-#' @param model Character string specifying the GCM responsible for data input.
-#' @param cacheDir Character string specifying the directory containing pre-calculated
-#' function outputs.
+#' @param model \code{character} string specifying the GCM responsible for data input.
+#' @param cacheDir \code{character} string specifying the directory containing pre-calculated
+#'   function outputs.
 #'
-#' @returns A \code{terra::SpatRaster} object with layers representing regression
-#' parameters for each cell.
+#' @returns \code{terra::SpatRaster} object with layers representing regression parameters for each cell.
 #'
 #' @author Hagen Tockhorn
 #'
@@ -56,18 +55,12 @@ computeBAITpars <- function(model = "20crv3-era5",
 
   vars <- c("tas", "sfcwind", "rsds", "huss")
 
-  data <- vapply(
-    vars,
-    function(v) {
-      tmp <- rast(vapply(files[[v]], function(f) importData(subtype = f),
-                         FUN.VALUE = list(), USE.NAMES = FALSE))
-      tmp
-    },
-    FUN.VALUE = rast(),
-    USE.NAMES = TRUE
-  )
-
-  print("Reading completed")
+  data <- setNames(lapply(vars, function(v) {
+    tmp <- rast(vapply(files[[v]], function(f) importData(subtype = f),
+                       FUN.VALUE = list(), USE.NAMES = FALSE))
+    return(tmp)
+  }),
+  vars)
 
 
 
@@ -79,9 +72,7 @@ computeBAITpars <- function(model = "20crv3-era5",
   # convert tas into [C]
   data$tas <- data$tas - 273.15
 
-
-  # nolint start
-  regPars <- sapply(vars[vars != "tas"], function(v) {
+  regPars <- do.call(rast, lapply(vars[vars != "tas"], function(v) {
     x <- data[["tas"]]
     y <- data[[v]]
 
@@ -89,18 +80,10 @@ computeBAITpars <- function(model = "20crv3-era5",
 
     names(r) <- c(paste0("a_", v), paste0("b_", v))
     return(r)
-  },
-  USE.NAMES = FALSE) %>%
-    rast()
-  # nolint end
-
-  terra::writeCDF(regPars, paste0("/p/tmp/hagento/output/", model, "/baitpars_", model, ".nc")) # nolint
+  }))
 
 
   # OUTPUT----------------------------------------------------------------------
 
-  return(list(x = regPars,
-              class = "SpatRaster",
-              unit = "(unit)",
-              description = "Regression parameters for calcHDDCDD"))
+  return(regPars)
 }
