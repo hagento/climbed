@@ -1,37 +1,52 @@
-# CLIMBED - Climate Data Integration for Modeling Building Energy Demand
+# Climate Data Integration for Modeling Building Energy Demand
 
-**Version:** v0.1.0-dev
-**Status:** 🚧 Under Development
+R package **climbed**, version **0.1.0.9003**
 
----
+[![CRAN status](https://www.r-pkg.org/badges/version/climbed)](https://cran.r-project.org/package=climbed)  [![R build status](https://github.com/hagento/climbed/workflows/check/badge.svg)](https://github.com/hagento/climbed/actions) [![codecov](https://codecov.io/gh/hagento/climbed/branch/master/graph/badge.svg)](https://app.codecov.io/gh/hagento/climbed) 
 
-## About
+## Purpose and Functionality
 
-This project is currently in its early development phase. The functionality is incomplete, and this repository may undergo significant changes as development progresses.
+Prepare climate data to be used by building energy demand models.
 
-A complete and detailed README will be added soon, including:
 
-- **Overview of the project**
-- **Installation instructions**
-- **Usage examples**
-- **Contributing guidelines**
-- **License information**
+## Installation
 
----
+For installation of the most recent package version an additional repository has to be added in R:
 
-## Current State
+```r
+options(repos = c(CRAN = "@CRAN@", pik = "https://rse.pik-potsdam.de/r/packages"))
+```
+The additional repository can be made available permanently by adding the line above to a file called `.Rprofile` stored in the home folder of your system (`Sys.glob("~")` in R returns the home directory).
 
-- This version (`v0.1.0-dev`) serves as the initial commit for development purposes.
-- The codebase is not yet functional for production use.
-- Contributions and feedback are welcome, but expect active updates and potential breaking changes.
+After that the most recent version of the package can be installed using `install.packages`:
 
----
+```r 
+install.packages("climbed")
+```
 
-## Next Steps
+Package updates can be installed using `update.packages` (make sure that the additional repository has been added before running that command):
 
-### TODO
-- [ ] Implement core functionality
-- [ ] Add unit tests
-- [ ] Write a full README with usage instructions
+```r 
+update.packages()
+```
 
-Stay tuned for updates as this project takes shape! 🚀
+## Questions / Problems
+
+In case of questions / problems please contact Hagen Tockhorn <hagento@pik-potsdam.de>.
+
+## Citation
+
+To cite package **climbed** in publications use:
+
+Tockhorn H (2024). _climbed: Climate Data Integration for Modeling Building Energy Demand_. R package version 0.1.0.9003.
+
+A BibTeX entry for LaTeX users is
+
+ ```latex
+@Manual{,
+  title = {climbed: Climate Data Integration for Modeling Building Energy Demand},
+  author = {Hagen Tockhorn},
+  year = {2024},
+  note = {R package version 0.1.0.9003},
+}
+```
