@@ -10,16 +10,18 @@
 #' is assumed, while for huss, an exponential relationship is adopted, reflecting
 #' the non-linear dependence of water vapor pressure on temperature.
 #'
-#' @param model Character string specifying the GCM responsible for data input.
-#' @param cacheDir Character string specifying the directory containing pre-calculated
-#' function outputs.
+#' @param model \code{character} string specifying the GCM responsible for data input.
+#' @param cacheDir \code{character} string specifying the directory containing pre-calculated
+#'   function outputs.
 #'
-#' @return A `terra::SpatRaster` object with layers representing regression
-#' parameters for each cell.
+#' @returns \code{terra::SpatRaster} object with layers representing regression parameters for each cell.
 #'
 #' @author Hagen Tockhorn
 #'
 #' @importFrom terra regress rast
+#' @importFrom madrat toolGetMapping readSource
+#' @importFrom magclass as.magpie
+#' @importFrom utils read.csv2
 #' @importFrom piamutils getSystemFile
 
 
@@ -48,27 +50,17 @@ computeBAITpars <- function(model = "20crv3-era5",
 
   # READ-IN DATA----------------------------------------------------------------
 
-  files <- read.csv("inst/extdata/sectoral/BAITpars_fileMapping.csv") %>% # TODO: clean up
+  files <- read.csv2(getSystemFile("extdata", "sectoral", "BAITpars_fileMapping.csv", package = "climbed")) %>%
     filter(.data[["gcm"]] == model)
-
 
   vars <- c("tas", "sfcwind", "rsds", "huss")
 
-  # nolint start
-  data <- sapply(vars, function(v) {
-    tmp <- sapply(files[[v]],
-                  function(f) {
-                    return(importData(subtype = f))
-                  },
-                  USE.NAMES = FALSE) %>%
-      rast()
-
+  data <- setNames(lapply(vars, function(v) {
+    tmp <- rast(vapply(files[[v]], function(f) importData(subtype = f),
+                       FUN.VALUE = list(), USE.NAMES = FALSE))
     return(tmp)
-  },
-  USE.NAMES = TRUE)
-  # nolint end
-
-  print("Reading completed")
+  }),
+  vars)
 
 
 
@@ -80,9 +72,7 @@ computeBAITpars <- function(model = "20crv3-era5",
   # convert tas into [C]
   data$tas <- data$tas - 273.15
 
-  # nolint start
-  # calculate regression parameters
-  regPars <- sapply(vars[vars != "tas"], function(v) {
+  regPars <- do.call(rast, lapply(vars[vars != "tas"], function(v) {
     x <- data[["tas"]]
     y <- data[[v]]
 
@@ -90,16 +80,7 @@ computeBAITpars <- function(model = "20crv3-era5",
 
     names(r) <- c(paste0("a_", v), paste0("b_", v))
     return(r)
-  },
-  USE.NAMES = FALSE) %>%
-    rast()
-  #nolint end
-
-
-  # write if file does not yet exist
-  if (!file.exists(paste0(cacheDir, "/baitpars_", model, ".nc"))) {
-    terra::writeCDF(regPars, paste0(cacheDir, "/baitpars_", model, ".nc")) # TODO: generalize
-  }
+  }))
 
 
   # OUTPUT----------------------------------------------------------------------

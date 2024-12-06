@@ -1,20 +1,27 @@
-# --- FUNCTIONS TO CALCULATE BIAS-ADJUSTED INTERNAL TEMPERATURE ----------------
-
-
-
-#' Read in necessary climate data to calculate BAIT or calculate mean values of
-#' said climate data to fill missing data in case of temporal mismatch between
-#' near-surface atmospherical temperature and other considered climate data.
+#' Read and Process Climate Data for BAIT Calculation or Data Imputation
 #'
-#' @param frsds file path to raster data on surface downdwelling shortwave radiation
-#' @param fsfc file path to raster data on near-surface wind speed
-#' @param fhuss file path to raster data on near-surface specific humidity
-#' @param baitInput named list of climate data
-#' @param fillWithMean boolean, only mean is calculated and returned
+#' This function reads the necessary climate data to calculate BAIT (Bias-Adjusted Internal Temperature)
+#' or computes mean values of the specified climate variables to impute missing data.
+#' Imputation is used in cases where there is a temporal mismatch between near-surface atmospheric temperature
+#' data and other climate variables.
 #'
-#' @return named list with read-in or meaned climate data
+#' @param frsds \code{character} string specifying the file path to raster data on
+#' surface downwelling shortwave radiation.
+#' @param fsfc \code{character} string specifying the file path to raster data on
+#' near-surface wind speed.
+#' @param fhuss \code{character} string specifying the file path to raster data on
+#' near-surface specific humidity.
+#' @param baitInput \code{list} containing \code{terra::SpatRaster} objects for
+#' climate data inputs used in BAIT calculation.
+#' @param fillWithMean \code{logical}; if \code{TRUE}, the function calculates and
+#' returns the mean of the climate data
+#'   instead of the raw data.
+#'
+#' @returns \code{list} containing either the read-in \code{terra::SpatRaster} climate
+#' data or the computed mean values of the data.
 #'
 #' @importFrom terra tapp
+#' @importFrom stats setNames
 
 prepBaitInput <- function(frsds = NULL,
                           fsfc = NULL,
@@ -24,43 +31,58 @@ prepBaitInput <- function(frsds = NULL,
 
   if (isTRUE(fillWithMean)) {
     # optional: calculate daily means over years to fill missing data
-    baitInputMean <- sapply( # nolint
-      names(baitInput),
-      function(var) {
-        meanData <- tapp(baitInput[[var]],
-                         unique(substr(names(baitInput[[var]]), 6, 11)),
-                         fun = "mean")
-        names(meanData) <- gsub("\\.", "-", substr(names(mean), 2, 6))
-        return(meanData)
-      }
-    )
+    baitInputMean <- setNames(lapply(names(baitInput), function(var) {
+      meanData <- tapp(baitInput[[var]],
+                       unique(substr(names(baitInput[[var]]), 6, 11)),
+                       fun = "mean")
+
+      names(meanData) <- gsub("\\.", "-", substr(names(meanData), 2, 6))
+      return(meanData)
+    }),
+    names(baitInput))
+
     return(baitInputMean)
   } else {
-    input <- list( # nolint start
-      "rsds" = importData(subtype = frsds),
-      "sfc"  = importData(subtype = fsfc),
-      "huss" = importData(subtype = fhuss))
-    return(input) # nolint end
+    input <- list("rsds" = importData(subtype = frsds),
+                  "sfc"  = importData(subtype = fsfc),
+                  "huss" = importData(subtype = fhuss))
+    return(input)
   }
 }
 
 
 
-#' Calculate counterfactuals for solar radiation, wind speed, specific humidity
-#' and near-surface temperature as function of raster data on near-surface temperature.
+#' Calculate Counterfactual Climate Variables as a Function of Near-Surface Temperature
 #'
-#' The expected value of the respective climate variable (except temperature) is
-#' calculated from parameters taken from a preceding linear regression done in
-#' calcBAITpars where the respective variable is correlated with the near-surface
-#' atmospherical temperature.
-#' If no cell-resoluted parameters are given, the globally-meaned parameters from
-#' Staffel et. all 2023 are taken (see https://doi.org/10.1038/s41560-023-01341-5).
+#' Computes the expected values of solar radiation, wind speed, specific humidity,
+#' or near-surface temperature based on raster data of near-surface temperature.
+#' The calculation uses regression parameters derived from prior analysis, correlating
+#' the respective climate variable with near-surface atmospheric temperature.
 #'
-#' @param t raster data on near-surface atmospherical temperature
-#' @param type considered climate variable
-#' @param params regression parameters as vector or raster object
+#' If cell-specific regression parameters are unavailable, globally averaged
+#' parameters from Staffel et al. (2023) are used as a fallback.
+#' For further details, see \url{https://doi.org/10.1038/s41560-023-01341-5}.
 #'
-#' @return counterfactuals for respective climate variable
+#' @param t \code{terra::SpatRaster} object representing near-surface atmospheric temperature.
+#' @param type \code{character} string specifying the climate variable to calculate. Options include:
+#'   \itemize{
+#'     \item \code{"rsds"}: Shortwave solar radiation.
+#'     \item \code{"sfcwind"}: Surface wind speed.
+#'     \item \code{"huss"}: Specific humidity.
+#'     \item \code{"tas"}: Near-surface temperature (optional, if applying the function to temperature itself).
+#'   }
+#' @param params Regression parameters provided as either:
+#'   \itemize{
+#'     \item A \code{vector} for globally averaged parameters.
+#'     \item A \code{terra::SpatRaster} object for cell-specific parameters.
+#'   }
+#'
+#' @returns \code{terra::SpatRaster} object representing the calculated counterfactual
+#'   values for the specified climate variable.
+#'
+#' @importFrom terra rast
+#' @importFrom terra subset
+#' @importFrom stringr str_sub
 
 cfac <- function(t, type, params = NULL) {
   if (is.null(params)) {
@@ -71,26 +93,24 @@ cfac <- function(t, type, params = NULL) {
                      t = c(16))
   }
 
-  # nolint start
   return(switch(type,
-                s = {params[[1]] + params[[2]] * t},
-                w = {params[[1]] + params[[2]] * t},
-                h = {exp(params[[1]] + params[[2]] * t)},
-                t = {params[[1]]},
-                warning("No valid parameter type specified.")
-                )
-         )
-  # nolint end
+                s = params[[1]] + params[[2]] * t,
+                w = params[[1]] + params[[2]] * t,
+                h = exp(params[[1]] + params[[2]] * t),
+                t = params[[1]],
+                warning("No valid parameter type specified.")))
 }
 
 
 
-#' Smooth data over preceding two days
+#' Smooth Data Over Preceding Two Days
 #'
-#' @param r raster data to be smoothed
-#' @param weight named list with smoothing parameter sig
+#' Applies a smoothing operation to raster data using a specified smoothing parameter.
 #'
-#' @return smoothed raster data
+#' @param r \code{terra::SpatRaster} object containing the data to be smoothed.
+#' @param weight \code{list} with a named smoothing parameter \code{sig}.
+#'
+#' @returns \code{terra::SpatRaster} object with smoothed data.
 #'
 #' @importFrom terra nlyr
 
@@ -111,23 +131,22 @@ smooth <- function(r, weight) {
 
 
 
-#' Weighted blend of BAIT and near-surface atmospherical temperature
+#' Weighted Blend of BAIT and Near-Surface Air Temperature
 #'
-#' To adress loss of buildings' internal memory of previous conditions at high
-#' outside temperatures due to window opening, etc., BAIT and outside temperature
-#' are blended. The blend is active between a lower and upper temperature threshold,
-#' \code{bLower} and \code{bUpper}, which are mapped to a range of -5 to +5 of a
-#' sigmoid function (corresponding to a 1% and 99% blend). The maximum amount of
-#' blending (i.e. the amplitude of the sigmoid function) is given by a parameter \code{bMax}.
+#' Blends BAIT and near-surface temperature data to account for the loss of a building's
+#' internal memory of previous conditions at high external temperatures (e.g., due to window opening).
+#' The blend is applied between a lower and upper temperature threshold, \code{bLower} and \code{bUpper},
+#' mapped to a range of -5 to +5 in a sigmoid function, corresponding to 1% and 99% blending.
+#' The maximum blending amplitude is controlled by the parameter \code{bMax}.
 #'
-#' @param bait raster data on BAIT
-#' @param tas raster data on near-surface atmospherical temperature
-#' @param weight named list with blending parameters bLower, bUpper, bMax
+#' @param bait \code{terra::SpatRaster} object containing BAIT data.
+#' @param tas \code{terra::SpatRaster} object containing near-surface air temperature data.
+#' @param weight \code{list} with blending parameters \code{bLower}, \code{bUpper}, and \code{bMax}.
 #'
-#' @return blended raster data
+#' @returns \code{terra::SpatRaster} object with blended data.
 
 blend <- function(bait, tas, weight) {
-  bBar <- (tas - 0.5 * (weight[["bUpper"]] + weight[["bLower"]])) * 10 / (weight[["bUpper"]] - weight[["bLower"]])
+  bBar <- (tas - mean(weight[c("bUpper", "bLower")])) * 10 / (weight[["bUpper"]] - weight[["bLower"]])
   b    <- weight[["bMax"]] / (1 + exp(-bBar))
 
   blend <- bait * (1 - b) + (tas * b)
@@ -136,25 +155,27 @@ blend <- function(bait, tas, weight) {
 
 
 
-#' Calculate bias-adjusted internal temperature (BAIT)
+#' Calculate Bias-Adjusted Internal Temperature (BAIT)
 #'
-#' BAIT is calculated from raster data on near-surface atmospherical temperature
-#' (tas), surface downdwelling shortwave radiation (rsds), near-surface wind speed
-#' (sfcwind) and near-surface specific humidity (huss). The latter three climate
-#' parameters are incorporated in the calculation of BAIT as the difference from
-#' their real value to the their expected value w.r.t. the near-surface temperature
-#' (see \code{\link{cfac}}). These are then incorporated in a weighted sum to
-#' account for the respective influence of each climate parameter on BAIT.
-#' The raster data containing BAIT is smoothed to account for the
-#' buildings' thermal inertia (see \code{\link{smooth}}) and blended with the
-#' near-surface temperature (see \code{\link{blend}}).
+#' Computes BAIT from raster data of near-surface atmospheric temperature (\code{tas}),
+#' surface downwelling shortwave radiation (\code{rsds}), near-surface wind speed
+#' (\code{sfcwind}), and near-surface specific humidity (\code{huss}).
+#' The latter three climate variables are adjusted by calculating the difference
+#' between their real values and their expected values relative to near-surface
+#' temperature (see \code{\link{cfac}}). These adjusted values are combined in
+#' a weighted sum to account for the respective influence of each variable on BAIT.
 #'
-#' @param baitInput named list containing rsds, sfcwind, huss climate data
-#' @param tasData raster data on near-surface atmospherical temperature
-#' @param weight named list with weights
-#' @param params optional named list with regression parameters from calcBAITpars
+#' The resulting BAIT data is smoothed to account for thermal inertia (see \code{\link{smooth}})
+#' and blended with near-surface temperature (see \code{\link{blend}}) to address the
+#' loss of internal memory at high temperatures.
 #'
-#' @return raster object with BAIT values
+#' @param baitInput \code{list} containing \code{rsds}, \code{sfcwind}, and \code{huss}
+#'   climate data as \code{terra::SpatRaster} objects.
+#' @param tasData \code{terra::SpatRaster} object representing near-surface atmospheric temperature.
+#' @param weight \code{list} containing weights for the climate variables and blending parameters.
+#' @param params \code{list} (optional) containing regression parameters derived from \code{calcBAITpars}.
+#'
+#' @returns \code{terra::SpatRaster} object containing BAIT values.
 
 compBAIT <- function(baitInput, tasData, weight = NULL, params = NULL) {
   if (is.null(weight)) {
@@ -184,7 +205,7 @@ compBAIT <- function(baitInput, tasData, weight = NULL, params = NULL) {
   # smooth bait
   bait <- smooth(bait, weight)
 
-  # # blend bait
+  # blend bait
   bait <- blend(bait, tasData, weight)
 
   return(bait)
