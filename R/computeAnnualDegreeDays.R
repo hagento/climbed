@@ -1,3 +1,96 @@
+#' Initialize Degree Days Calculation
+#'
+#' Initiates the calculation of degree days for a single scenario, model, and time period.
+#' The calculation is split into yearly periods to improve computational stability.
+#'
+#' @param fileMapping A named list containing file paths and metadata. Expected elements include:
+#'   \describe{
+#'     \item{tas}{Path to temperature data file.}
+#'     \item{rsds}{Path to solar radiation data file (required if \code{bait} is TRUE).}
+#'     \item{sfcwind}{Path to surface wind data file (required if \code{bait} is TRUE).}
+#'     \item{huss}{Path to humidity data file (required if \code{bait} is TRUE).}
+#'     \item{start}{Start year of the time period.}
+#'     \item{end}{End year of the time period.}
+#'     \item{rcp}{RCP scenario identifier.}
+#'     \item{gcm}{GCM model identifier.}
+#'   }
+#' @param pop \code{SpatRaster} with annual population data.
+#' @param ssp \code{character} SSP scenario.
+#' @param bait \code{logical} indicating whether to use raw temperature or BAIT as ambient temperature.
+#' @param tLim \code{numeric} Temperature limits for degree day calculations.
+#' @param countries \code{SpatRaster} containing the region masks.
+#' @param hddcddFactor \code{data.frame} containing pre-computed degree days.
+#' @param wBAIT \code{numeric} (Optional) Weights for BAIT adjustments. Default is \code{NULL}.
+#' @param baitPars \code{list} (Optional) Parameters for BAIT calculations. Default is \code{NULL}.
+#'
+#' @returns \code{data.frame} containing annual degree days.
+#'
+#' @author Hagen Tockhorn
+#'
+#' @importFrom dplyr mutate
+#' @importFrom magrittr %>%
+
+initCalculation <- function(fileMapping,
+                            pop,
+                            ssp,
+                            bait,
+                            tLim,
+                            hddcddFactor,
+                            wBAIT = NULL) {
+  # extract filenames
+  ftas  <- fileMapping[["tas"]]
+  frsds <- if (bait) fileMapping[["rsds"]]    else NULL
+  fsfc  <- if (bait) fileMapping[["sfcwind"]] else NULL
+  fhuss <- if (bait) fileMapping[["huss"]]    else NULL
+
+  # extract temporal interval
+  yStart <- fileMapping[["start"]] %>% as.numeric()
+  yEnd   <- fileMapping[["end"]] %>% as.numeric()
+
+  # extract RCP scenario + model
+  rcp   <- fileMapping[["rcp"]] %>% unique()
+  model <- fileMapping[["gcm"]] %>% unique()
+
+
+  # read country masks
+  countries <- importData(subtype = "countrymasks-fractional_30arcmin.nc")
+
+
+  if (bait) {
+    # bait regression parameters
+    baitPars <- computeBAITpars(model = unique(fileMapping$gcm))
+    names(baitPars) <- c("aRSDS", "bRSDS", "aSFC", "bSFC", "aHUSS", "bHUSS") # TODO: change this
+  }
+
+
+  # loop over single years and compute annual degree days
+  hddcdd <- do.call("rbind", lapply(seq(1, yEnd - yStart + 1), function(i) {
+    message("Initiating calculating degree days for the year: ", seq(yStart, yEnd)[[i]])
+
+    compStackHDDCDD(ftas  = gsub(".nc", paste0("_", i, ".nc"), ftas),
+                    frsds = if (bait) gsub(".nc", paste0("_", i, ".nc"), frsds) else NULL,
+                    fsfc  = if (bait) gsub(".nc", paste0("_", i, ".nc"), fsfc)  else NULL,
+                    fhuss = if (bait) gsub(".nc", paste0("_", i, ".nc"), fhuss) else NULL,
+                    tlim = tLim,
+                    pop = pop,
+                    countries = countries,
+                    factors = hddcddFactor,
+                    bait = bait,
+                    wBAIT  = wBAIT,
+                    baitPars = baitPars)
+  }))
+
+  hddcdd <- hddcdd %>%
+    mutate("model" = model,
+           "ssp" = ssp,
+           "rcp" = rcp)
+
+  return(hddcdd)
+}
+
+
+
+
 #' Calculate Country-wise Population-weighted HDD/CDD Values
 #'
 #' This function computes population-weighted Heating Degree Days (HDD) and Cooling Degree Days (CDD)
