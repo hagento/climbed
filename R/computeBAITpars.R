@@ -50,15 +50,15 @@ computeBAITpars <- function(model = "20crv3-era5",
 
   # READ-IN DATA----------------------------------------------------------------
 
-  files <- read.csv2(getSystemFile("extdata", "sectoral", "BAITpars_fileMapping.csv", package = "climbed")) %>%
+  files <- read.csv2(getSystemFile("extdata", "mappings", "BAITpars_fileMapping.csv", package = "climbed")) %>%
     filter(.data[["gcm"]] == model)
 
   vars <- c("tas", "sfcwind", "rsds", "huss")
 
   data <- setNames(lapply(vars, function(v) {
-    tmp <- rast(vapply(files[[v]], function(f) importData(subtype = f),
+    dataVar <- rast(vapply(files[[v]], function(f) importData(subtype = f),
                        FUN.VALUE = list(), USE.NAMES = FALSE))
-    return(tmp)
+    return(dataVar)
   }),
   vars)
 

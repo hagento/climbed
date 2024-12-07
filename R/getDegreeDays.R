@@ -24,6 +24,8 @@
 #' @param outDir A string specifying the absolute path to the \code{output} directory. This will also
 #' contain the \code{logs} and \code{tmp} directories for log and temporary files.
 #'
+#' @returns Saves a \code{.csv} file containing the calculated degree days.
+#'
 #' @author Hagen Tockhorn
 #'
 #' @importFrom dplyr filter
@@ -48,11 +50,12 @@ getDegreeDays <- function(mappingFile = NULL,
   }
 
   # absolute path
-  mappingFile <- getSystemFile("extdata", "sectoral", mappingFile, package = "climbed")
+  mappingFile <- getSystemFile("extdata", "mappings", mappingFile, package = "climbed")
 
   if (!file.exists(mappingFile)) {
-    stop("Provided mapping file does not exist in /extdata/sectoral.")
+    stop("Provided mapping file does not exist in /extdata/mappings.")
   }
+
 
 
   # PARAMETERS -----------------------------------------------------------------
@@ -71,40 +74,6 @@ getDegreeDays <- function(mappingFile = NULL,
   tUp  <- 348 - 273.15
 
 
-  #--- BAIT parameters
-
-  # The weights (wRSDS, wSFC, wHUSS) for calcBAIT and the smoothing coefficient are assumed to
-  # be region-independent and equal to the mean of the values given in Staffell
-  # et al. 2023.
-
-  # The weights below give the respective weight of the difference between the
-  # climate factor and its counterfactual in calculating BAIT.
-  wRSDS <- 0.012
-  wSFC <- -0.20
-  wHUSS <- 0.05
-
-  # The smoothing coefficient defines the assumed thermal intertia of the building
-  # and weighs the influence of the internal temperature of the preceding two days.
-  sig <- 0.50
-
-  # The blending parameters for the blending of BAIT and raw temperature are like-wise
-  # taken from the paper.
-  # At bLower, we consider only BAIT. For higher temperatures, we assume a mix with the ambient
-  # temperature reaching the highest contribution of bMax at bUpper following a sigmoid function
-  bLower <- 15
-  bUpper <- 23
-  bMax   <- 0.5
-
-  # concatenate to vector
-  wBAIT <- list("wRSDS"  = wRSDS,
-                "wSFC"   = wSFC,
-                "wHUSS"  = wHUSS,
-                "sig"    = sig,
-                "bLower" = bLower,
-                "bUpper" = bUpper,
-                "bMax"   = bMax)
-
-
   # scenario matrix
   # TODO: bring this into a mapping file
   sspMapping <- list(
@@ -117,12 +86,6 @@ getDegreeDays <- function(mappingFile = NULL,
   )
 
 
-  # population mapping
-  # TODO: bring this into a mapping file
-  popMapping <- c("historical" = "population_histsoc_30arcmin_annual_1901_2021.nc",
-                  "ssp2"       = "population_ssp2_30arcmin_annual_2015_2100.nc")
-
-
   # track submitted jobs
   allJobs <- list()
 
@@ -132,6 +95,18 @@ getDegreeDays <- function(mappingFile = NULL,
 
   # file mapping
   fileMapping <- read.csv2(mappingFile)
+
+
+  # external BAIT weights and parameters
+  wBAIT <- read.csv2(getSystemFile("extdata", "mappings", "BAITweights.csv",
+                                   package = "climbed"),
+                     stringsAsFactors = FALSE)
+
+
+  # population files
+  popMapping <- read.csv2(getSystemFile("extdata", "mappings", "populationMapping.csv",
+                                        package = "climbed"),
+                          stringsAsFactors = FALSE)
 
 
 
@@ -153,6 +128,13 @@ getDegreeDays <- function(mappingFile = NULL,
 
   # PROCESS DATA ---------------------------------------------------------------
 
+  # bring wBAIT into appropriate form
+  wBAIT <- setNames(as.list(wBAIT$value), wBAIT$variable)
+
+  # bring popMapping into appropriate form
+  popMapping <- setNames(as.list(popMapping$file), popMapping$scenario)
+
+
   # calculate HDD/CDD-factors
   hddcddFactor <- compFactors(tLow = tLow, tUp = tUp, tLim, std[["tAmb"]], std[["tLim"]])
 
@@ -169,9 +151,7 @@ getDegreeDays <- function(mappingFile = NULL,
     message("\nProcessing SSP scenario: ", s)
 
     # read in population data
-    message("Reading population data...")
     pop <- importData(subtype = popMapping[[s]])
-
 
     # filter compatible RCP scenarios
     files <- fileMapping %>%
@@ -218,10 +198,8 @@ getDegreeDays <- function(mappingFile = NULL,
   # extract all job IDs
   jobIds <- sapply(allJobs, function(x) x$jobId) # nolint
 
-  # wait for our specific jobs to complete (max. 6hrs)
-  waitForSlurm(jobIds, maxWaitTime = 6 * 60 * 60)
-
-  message("All jobs completed successfully")
+  # wait for our specific jobs to complete (max. 12hrs)
+  waitForSlurm(jobIds, maxWaitTime = 12 * 60 * 60)
 
 
 

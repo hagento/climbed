@@ -1,0 +1,8 @@
+variable;description;value;source
+aRSDS;Fit parameters for counterfactual S*;100;Staffell et al. 2023 (https://doi.org/10.1038/s41560-023-01341-5)
+bRSDS;Fit parameters for counterfactual S*;7;Staffell et al. 2023 (https://doi.org/10.1038/s41560-023-01341-5)
+aSFC;Fit parameters for counterfactual W*;4,5;Staffell et al. 2023 (https://doi.org/10.1038/s41560-023-01341-5)
+bSFC;Fit parameters for counterfactual W*;-0,025;Staffell et al. 2023 (https://doi.org/10.1038/s41560-023-01341-5)
+aHUSS;Fit parameters for counterfactual H*;1,1;Staffell et al. 2023 (https://doi.org/10.1038/s41560-023-01341-5)
+bHUSS;Fit parameters for counterfactual H*;0,06;Staffell et al. 2023 (https://doi.org/10.1038/s41560-023-01341-5)
+T;Fit parameters for counterfactual T*;16;Staffell et al. 2023 (https://doi.org/10.1038/s41560-023-01341-5)

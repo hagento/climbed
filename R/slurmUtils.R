@@ -1,26 +1,28 @@
-#### SLURM JOB UTILITIES ####
-
-
 #' Create a Slurm Job for Running initCalculation
 #'
-#' @param fileRow A data frame row containing file mapping details
-#' @param pop Population data to be passed to initCalculation
-#' @param ssp Shared Socioeconomic Pathway scenario
-#' @param bait Logical indicating whether to use BAIT calculation
-#' @param tLim Temperature limits for degree day calculation
-#' @param hddCddFactor Heating/Cooling Degree Day factors
-#' @param wBAIT Weights for BAIT calculation
-#' @param jobConfig List of Slurm job configuration parameters. Currently supports
-#' @param outDir A string specifying the absolute path to the \code{output} directory. This will also
-#' contain the \code{logs} and \code{tmp} directories for log and temporary files.
+#' @param fileRow \code{data.frame} row containing file mapping details
+#' @param pop \code{SpatRaster} Population data to be passed to initCalculation
+#' @param ssp \code{character} Shared Socioeconomic Pathway scenario
+#' @param bait \code{logical} indicating whether to use BAIT calculation
+#' @param tLim \code{numeric} Temperature limits for degree day calculation
+#' @param hddcddFactor \code{data.frame} Heating/Cooling Degree Day factors
+#' @param wBAIT \code{numeric} Weights for BAIT calculation
+#' @param jobConfig \code{list} of Slurm job configuration parameters
+#' @param outDir \code{character} Absolute path to the output directory, containing logs/ and tmp/
 #'
-#' @return A list containing job details including job name, script path,
-#'         output file path, and Slurm submission command
+#' @returns \code{list} containing job details:
+#'   - jobName: Name of the Slurm job
+#'   - jobScript: Path to job script
+#'   - outputFile: Path to output file
+#'   - slurmCommand: Slurm submission command
+#'   - jobId: Slurm job ID
+#'   - batch_tag: Unique batch identifier
 #'
 #' @author Hagen Tockhorn
 #'
 #' @importFrom stringr str_extract
 #' @importFrom piamutils getSystemFile
+#' @importFrom terra writeCDF
 
 createSlurm <- function(fileRow,
                         pop,
@@ -51,7 +53,7 @@ createSlurm <- function(fileRow,
   # match slurm job configs
   config <- modifyList(defaultConfig, jobConfig)
 
-  # create temporary file and log file directory
+  # create directories output, output/tmp, output/logs and output/hddcdd
   tmpDir <- file.path(outDir, "tmp")
   dir.create(tmpDir, recursive = TRUE, showWarnings = FALSE)
   dir.create(config$logsDir, recursive = TRUE, showWarnings = FALSE)
@@ -60,10 +62,11 @@ createSlurm <- function(fileRow,
   # create a unique tag for this batch of files
   batch_tag <- format(Sys.time(), "%Y%m%d_%H%M%S")
 
-  # save files temporarily with the unique tag
+  # save files temporarily with a time tag to remove after successful processing
   pop_names <- names(pop)
   saveRDS(pop_names, sprintf("%s/pop_names_%s.rds", tmpDir, batch_tag))
-  terra::writeCDF(pop, sprintf("%s/pop_%s.nc", tmpDir, batch_tag), overwrite = TRUE)
+  writeCDF(pop, sprintf("%s/pop_%s.nc", tmpDir, batch_tag), overwrite = TRUE)
+
   saveRDS(tLim, sprintf("%s/tLim_%s.rds", tmpDir, batch_tag))
   saveRDS(hddcddFactor, sprintf("%s/hddcddFactor_%s.rds", tmpDir, batch_tag))
   saveRDS(wBAIT, sprintf("%s/wBAIT_%s.rds", tmpDir, batch_tag))
@@ -158,14 +161,14 @@ createSlurm <- function(fileRow,
 #' Wait for SLURM Jobs to Complete
 #'
 #' Monitors the status of SLURM jobs and waits for their completion. The function
-#' periodically checks the status of specified jobs using `sacct` and handles
+#' periodically checks the status of specified jobs using \code{sacct} and handles
 #' different job states including failures, timeouts, and successful completions.
 #'
 #' @param jobIds A vector of SLURM job IDs to monitor. Can be numeric or character.
 #' @param checkInterval Number of seconds to wait between status checks (default: 60).
 #' @param maxWaitTime Maximum time in seconds to wait for job completion (default: 3600).
 #'
-#' @return Returns TRUE if all jobs complete successfully. Stops with an error if:
+#' @returns Returns TRUE if all jobs complete successfully. Stops with an error if:
 #'   - Any job fails (FAILED, CANCELLED, TIMEOUT, OUT_OF_MEMORY, NODE_FAIL)
 #'   - Maximum wait time is exceeded
 #'
@@ -178,48 +181,48 @@ waitForSlurm <- function(jobIds, checkInterval = 60, maxWaitTime = 3600) {
 
   while (TRUE) {
     # Get detailed job status including job steps
-    jobs_cmd <- sprintf("sacct -j %s --parsable2 --noheader --format=jobid,state",
-                        paste(jobSet, collapse = ","))
-    jobs_status <- system(jobs_cmd, intern = TRUE)
+    jobsCommand <- sprintf("sacct -j %s --parsable2 --noheader --format=jobid,state",
+                           paste(jobSet, collapse = ","))
+    jobsStatus <- system(jobsCommand, intern = TRUE)
 
-    if (length(jobs_status) == 0) {
+    if (length(jobsStatus) == 0) {
       stop("No job information found. Check if jobs exist.")
     }
 
     # Process status data
-    status_matrix <- do.call(rbind, strsplit(jobs_status, "|", fixed = TRUE))
-    parent_jobs <- status_matrix[!grepl("\\.", status_matrix[,1]), , drop = FALSE]
+    statusMatrix <- do.call(rbind, strsplit(jobsStatus, "|", fixed = TRUE))
+    parentJobs <- statusMatrix[!grepl("\\.", statusMatrix[, 1]), , drop = FALSE]
 
     # Check for failed states
-    failed_states <- c("FAILED", "CANCELLED", "TIMEOUT", "OUT_OF_MEMORY",
-                       "NODE_FAIL", "PREEMPTED", "DEADLINE")
-    failed_jobs <- parent_jobs[parent_jobs[,2] %in% failed_states, , drop = FALSE]
+    failedStates <- c("FAILED", "CANCELLED", "TIMEOUT", "OUT_OF_MEMORY",
+                      "NODE_FAIL", "PREEMPTED", "DEADLINE")
+    failedJobs <- parentJobs[parentJobs[, 2] %in% failedStates, , drop = FALSE]
 
-    if (nrow(failed_jobs) > 0) {
-      failed_msg <- sprintf("Jobs failed: %s",
-                            paste(sprintf("JobID %s: %s",
-                                          failed_jobs[,1], failed_jobs[,2]),
-                                  collapse = ", "))
-      stop(failed_msg)
+    if (nrow(failedJobs) > 0) {
+      failMessage <- sprintf("Jobs failed: %s",
+                             paste(sprintf("JobID %s: %s",
+                                           failedJobs[, 1], failedJobs[, 2]),
+                                   collapse = ", "))
+      stop(failMessage)
     }
 
     # Check for active states
-    active_states <- c("PENDING", "RUNNING", "COMPLETING", "CONFIGURING",
-                       "SUSPENDED", "REQUEUED", "RESIZING")
-    active_jobs <- parent_jobs[parent_jobs[,2] %in% active_states, , drop = FALSE]
+    activeStates <- c("PENDING", "RUNNING", "COMPLETING", "CONFIGURING",
+                      "SUSPENDED", "REQUEUED", "RESIZING")
+    activeJobs <- parentJobs[parentJobs[, 2] %in% activeStates, , drop = FALSE]
 
     # Verify completion
-    if (nrow(active_jobs) == 0) {
-      completed_jobs <- parent_jobs[parent_jobs[,2] == "COMPLETED", , drop = FALSE]
-      if (nrow(completed_jobs) == length(jobSet)) {
+    if (nrow(activeJobs) == 0) {
+      completedJobs <- parentJobs[parentJobs[, 2] == "COMPLETED", , drop = FALSE]
+      if (nrow(completedJobs) == length(jobSet)) {
         message(sprintf("All %d jobs completed successfully", length(jobSet)))
         return(TRUE)
       } else {
         # Some jobs are missing or in unexpected states
-        unknown_jobs <- setdiff(jobSet, parent_jobs[,1])
-        if (length(unknown_jobs) > 0) {
+        unknownJobs <- setdiff(jobSet, parentJobs[, 1])
+        if (length(unknownJobs) > 0) {
           stop(sprintf("Jobs with unknown status: %s",
-                       paste(unknown_jobs, collapse = ", ")))
+                       paste(unknownJobs, collapse = ", ")))
         }
         stop("Some jobs are in unexpected states. Check sacct manually.")
       }
@@ -237,7 +240,7 @@ waitForSlurm <- function(jobIds, checkInterval = 60, maxWaitTime = 3600) {
 
 
 #' Get Main Job ID
-#' @return Character string containing the main job ID or NULL if not in a Slurm job
+#' @returns Character string containing the main job ID or NULL if not in a Slurm job
 getMainJobId <- function() {
   slurm_job_id <- Sys.getenv("SLURM_JOB_ID")
   if (slurm_job_id == "") return(NULL)

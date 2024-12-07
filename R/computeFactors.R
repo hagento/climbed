@@ -76,14 +76,14 @@ compFactors <- function(tLow, tUp, tLim, tAmbStd = 2, tLimStd = 2) {
                          type = typeDD,
                          reltol = 1e-1)
 
-          tmp <- data.frame("T_amb"        = tAmb,
-                            "T_amb_K"      = round(tAmb + 273.15, 1),
-                            "tLim"         = .tLim,
-                            "factor"       = f$Q,
-                            "factor_err"   = f$error,
-                            "typeDD"       = typeDD)
+          df <- data.frame("T_amb"        = tAmb,
+                           "T_amb_K"      = round(tAmb + 273.15, 1),
+                           "tLim"         = .tLim,
+                           "factor"       = f$Q,
+                           "factor_err"   = f$error,
+                           "typeDD"       = typeDD)
 
-          return(tmp)
+          return(df)
         }))
       }))
     }))
