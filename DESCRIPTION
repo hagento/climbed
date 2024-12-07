@@ -1,7 +1,7 @@
 Package: climbed
 Type: Package
 Title: Climate Data Integration for Modeling Building Energy Demand
-Version: 0.1.0.9003
+Version: 0.1.0.9004
 Authors@R: c(person(given = "Hagen", family = "Tockhorn",
          role = c("aut", "cre"), email = "hagento@pik-potsdam.de"))
 Maintainer: Hagen Tockhorn <hagento@pik-potsdam.de>
@@ -20,4 +20,4 @@ Imports:
   raster,
   stringr,
   terra
-Date: 2024-12-06
+Date: 2024-12-07

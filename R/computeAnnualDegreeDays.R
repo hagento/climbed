@@ -18,10 +18,8 @@
 #' @param ssp \code{character} SSP scenario.
 #' @param bait \code{logical} indicating whether to use raw temperature or BAIT as ambient temperature.
 #' @param tLim \code{numeric} Temperature limits for degree day calculations.
-#' @param countries \code{SpatRaster} containing the region masks.
 #' @param hddcddFactor \code{data.frame} containing pre-computed degree days.
 #' @param wBAIT \code{numeric} (Optional) Weights for BAIT adjustments. Default is \code{NULL}.
-#' @param baitPars \code{list} (Optional) Parameters for BAIT calculations. Default is \code{NULL}.
 #'
 #' @returns \code{data.frame} containing annual degree days.
 #'

@@ -23,6 +23,7 @@
 #' @importFrom stringr str_extract
 #' @importFrom piamutils getSystemFile
 #' @importFrom terra writeCDF
+#' @importFrom utils modifyList
 
 createSlurm <- function(fileRow,
                         pop,

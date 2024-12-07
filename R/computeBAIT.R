@@ -99,7 +99,7 @@ cfac <- function(t, type, params = NULL) {
                 s = params[["aRSDS"]] + params[["bRSDS"]] * t,
                 w = params[["aSFC"]] + params[["bSFC"]] * t,
                 h = exp(params[["aHUSS"]] + params[["bHUSS"]] * t),
-                t = params[["t"]],
+                t = params[["T"]],
                 warning("No valid parameter type specified.")))
 }
 

@@ -24,8 +24,6 @@
 #' @importFrom utils read.csv2
 #' @importFrom piamutils getSystemFile
 
-
-
 computeBAITpars <- function(model = "20crv3-era5",
                             cacheDir = "intdata/BAITpars") {
   # CHECK CACHE-----------------------------------------------------------------
@@ -57,7 +55,7 @@ computeBAITpars <- function(model = "20crv3-era5",
 
   data <- setNames(lapply(vars, function(v) {
     dataVar <- rast(vapply(files[[v]], function(f) importData(subtype = f),
-                       FUN.VALUE = list(), USE.NAMES = FALSE))
+                           FUN.VALUE = list(), USE.NAMES = FALSE))
     return(dataVar)
   }),
   vars)
