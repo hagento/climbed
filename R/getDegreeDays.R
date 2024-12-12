@@ -74,18 +74,6 @@ getDegreeDays <- function(mappingFile = NULL,
   tUp  <- 348 - 273.15
 
 
-  # scenario matrix
-  # TODO: bring this into a mapping file
-  sspMapping <- list(
-    "historical" = "historical",
-    "ssp1"       = c("1.9", "2.6", "3.4", "4.5", "6.0"),
-    "ssp2"       = c("1.9", "2.6", "3.4", "4.5", "6.0", "7.0"),
-    "ssp3"       = c("3.4", "4.5", "6.0", "7.0"),
-    "ssp4"       = c("2.6", "3.4", "4.5", "6.0"),
-    "ssp5"       = c("2.6", "3.4", "4.5", "6.0", "7.0", "8.5")
-  )
-
-
   # track submitted jobs
   allJobs <- list()
 
@@ -109,6 +97,12 @@ getDegreeDays <- function(mappingFile = NULL,
                           stringsAsFactors = FALSE)
 
 
+  # scenario matrix
+  scenMatrix <- read.csv2(getSystemFile("extdata", "mappings", "scenarioMatrix.csv",
+                                        package = "climbed"),
+                          stringsAsFactors = FALSE)
+
+
 
   # CHECKS ---------------------------------------------------------------------
 
@@ -128,11 +122,16 @@ getDegreeDays <- function(mappingFile = NULL,
 
   # PROCESS DATA ---------------------------------------------------------------
 
-  # bring wBAIT into appropriate form
+  # --- Prepare Mappings
+
+  # BAIT weights
   wBAIT <- setNames(as.list(wBAIT$value), wBAIT$variable)
 
-  # bring popMapping into appropriate form
+  # population data
   popMapping <- setNames(as.list(popMapping$file), popMapping$scenario)
+
+  # scenario matrix
+  scenMatrix <- setNames(lapply(strsplit(scenMatrix$rcp, ","), trimws), scenMatrix$ssp)
 
 
   # calculate HDD/CDD-factors
@@ -155,7 +154,7 @@ getDegreeDays <- function(mappingFile = NULL,
 
     # filter compatible RCP scenarios
     files <- fileMapping %>%
-      filter(.data[["rcp"]] %in% sspMapping[[s]])
+      filter(.data[["rcp"]] %in% scenMatrix[[s]])
 
     if (nrow(files) == 0) {
       stop("Provided SSP scenario not in file mapping.")
@@ -196,7 +195,7 @@ getDegreeDays <- function(mappingFile = NULL,
   message("Waiting for jobs to complete...")
 
   # extract all job IDs
-  jobIds <- sapply(allJobs, function(x) x$jobId) # nolint
+  jobIds <- lapply(allJobs, function(x) x$jobId)
 
   # wait for our specific jobs to complete (max. 12hrs)
   waitForSlurm(jobIds, maxWaitTime = 12 * 60 * 60)
