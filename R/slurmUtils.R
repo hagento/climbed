@@ -9,6 +9,8 @@
 #' @param wBAIT \code{numeric} Weights for BAIT calculation
 #' @param jobConfig \code{list} of Slurm job configuration parameters
 #' @param outDir \code{character} Absolute path to the output directory, containing logs/ and tmp/
+#' @param globalPars \code{logical} indicating whether to use global or gridded BAIT parameters
+#' (required if \code{bait} is TRUE).
 #'
 #' @returns \code{list} containing job details:
 #'   - jobName: Name of the Slurm job
@@ -33,7 +35,8 @@ createSlurm <- function(fileRow,
                         hddcddFactor,
                         wBAIT,
                         jobConfig = list(),
-                        outDir = "output") {
+                        outDir = "output",
+                        globalPars = FALSE) {
   # PARAMETERS -----------------------------------------------------------------
 
   # define default slurm job configuration
@@ -131,7 +134,8 @@ createSlurm <- function(fileRow,
     "  tLim = tLim,",
     "  pop = pop,",
     "  hddcddFactor = hddcddFactor,",
-    "  wBAIT = wBAIT",
+    "  wBAIT = wBAIT,",
+    sprintf("  globalPars = '%s'", globalPars),
     ")",
     "",
     sprintf("write.csv(result, '%s', row.names = FALSE)", outputFile),
@@ -149,12 +153,12 @@ createSlurm <- function(fileRow,
 
 
   # return relevant job information
-  return(list(jobName = jobName,
-              jobScript = jobScript,
-              outputFile = outputFile,
-              slurmCommand = slurmCommand,
-              jobId = jobId,
-              batch_tag = batch_tag))
+  return(invisible(list(jobName = jobName,
+                        jobScript = jobScript,
+                        outputFile = outputFile,
+                        slurmCommand = slurmCommand,
+                        jobId = jobId,
+                        batch_tag = batch_tag)))
 }
 
 
@@ -180,7 +184,7 @@ waitForSlurm <- function(jobIds, checkInterval = 60, maxWaitTime = 3600) {
   jobIds <- as.character(jobIds)
   jobSet <- unique(jobIds)  # Remove duplicates
 
-  while (TRUE) {
+  while (difftime(Sys.time(), startTime, units = "secs") < maxWaitTime) {
     # Get detailed job status including job steps
     jobsCommand <- sprintf("sacct -j %s --parsable2 --noheader --format=jobid,state",
                            paste(jobSet, collapse = ","))
@@ -229,12 +233,11 @@ waitForSlurm <- function(jobIds, checkInterval = 60, maxWaitTime = 3600) {
       }
     }
 
-    # Check timeout
-    if (difftime(Sys.time(), startTime, units = "secs") > maxWaitTime) {
-      stop("Maximum wait time exceeded")
-    }
-
     Sys.sleep(checkInterval)
+  }
+
+  if (difftime(Sys.time(), startTime, units = "secs") > maxWaitTime) {
+    stop("Maximum wait time exceeded")
   }
 }
 

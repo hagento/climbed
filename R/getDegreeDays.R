@@ -23,6 +23,8 @@
 #' @param ssp A character vector specifying the SSP scenarios to include. Defaults to \code{c("historical", "SSP2")}.
 #' @param outDir A string specifying the absolute path to the \code{output} directory. This will also
 #' contain the \code{logs} and \code{tmp} directories for log and temporary files.
+#' @param globalPars \code{logical} indicating whether to use global or gridded BAIT parameters
+#' (required if \code{bait} is TRUE).
 #'
 #' @returns Saves a \code{.csv} file containing the calculated degree days.
 #'
@@ -41,7 +43,8 @@ getDegreeDays <- function(mappingFile = NULL,
                           tLim = list("HDD" = seq(9, 19), "CDD" = seq(15, 25)),
                           std  = c("tLim" = 2, "tAmb" = 2),
                           ssp  = c("historical", "SSP2"),
-                          outDir = "output") {
+                          outDir = "output",
+                          globalPars = FALSE) {
   # CHECKS ---------------------------------------------------------------------
 
   # check for mapping file
@@ -108,8 +111,10 @@ getDegreeDays <- function(mappingFile = NULL,
 
   # check if mapping file contains correct columns
   mappingCols <- c("gcm", "rcp", "start", "end", "tas", "rsds", "sfc", "huss")
-  if (!any(mappingCols %in% colnames(fileMapping))) {
-    stop("Please provide file mapping with correct columns.\n Missing columns: ")
+  missingCols <- setdiff(mappingCols, colnames(fileMapping)) # Identify missing columns
+  if (length(missingCols) > 0) { # Check if there are any missing columns
+    stop("Please provide file mapping with correct columns.\nMissing columns:\n",
+         paste(missingCols, collapse = ", "))
   }
 
   # create output directory if it doesn't exist
@@ -175,9 +180,10 @@ getDegreeDays <- function(mappingFile = NULL,
                              tLim = tLim,
                              hddcddFactor = hddcddFactor,
                              wBAIT = wBAIT,
-                             outDir = outDir)
+                             outDir = outDir,
+                             globalPars = globalPars)
 
-          allJobs[[length(allJobs) + 1]] <- job
+          allJobs <- c(allJobs, job)
           message("Job submitted successfully")
         },
         error = function(e) {

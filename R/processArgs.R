@@ -37,7 +37,8 @@
 #' @export
 
 processArgs <- function(tLim, std, ssp) {
-  #### Process tLim ####
+
+  # Process tLim ---------------------------------------------------------------
 
   # Helper function to create a sequence if input is a single numeric value
   createSeq <- function(x) {
@@ -80,7 +81,8 @@ processArgs <- function(tLim, std, ssp) {
     stop("tLim must be a numeric value or a named list/vector with 'HDD' and 'CDD'.")
   }
 
-  #### Process std ####
+
+  # Process std ----------------------------------------------------------------
 
   if (is.numeric(std)) {
     if (length(std) == 1) {
@@ -100,7 +102,8 @@ processArgs <- function(tLim, std, ssp) {
     stop("std must be numeric.")
   }
 
-  #### Process ssp ####
+
+  # Process ssp ----------------------------------------------------------------
 
   if (is.character(ssp)) {
     ssp <- as.vector(ssp) %>%
@@ -109,7 +112,9 @@ processArgs <- function(tLim, std, ssp) {
     stop("ssp must be a character string or vector.")
   }
 
-  #### Return standardized arguments ####
+
+
+  # Return standardized arguments
 
   return(list(tLim = tLim, std = std, ssp = ssp))
 }

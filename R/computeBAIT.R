@@ -5,12 +5,13 @@
 #' Imputation is used in cases where there is a temporal mismatch between near-surface atmospheric temperature
 #' data and other climate variables.
 #'
-#' @param frsds \code{character} string specifying the file path to raster data on
-#' surface downwelling shortwave radiation.
-#' @param fsfc \code{character} string specifying the file path to raster data on
-#' near-surface wind speed.
-#' @param fhuss \code{character} string specifying the file path to raster data on
-#' near-surface specific humidity.
+#' @param fileNames \code{character} A named vector of file paths extracted from \code{fileMapping}. Elements include:
+#'   \describe{
+#'     \item{tas}{Temperature data file path.}
+#'     \item{rsds}{Solar radiation data file path (included if \code{bait} is \code{TRUE}).}
+#'     \item{sfc}{Surface wind data file path (included if \code{bait} is \code{TRUE}).}
+#'     \item{huss}{Humidity data file path (included if \code{bait} is \code{TRUE}).}
+#'   }
 #' @param baitInput \code{list} containing \code{terra::SpatRaster} objects for
 #' climate data inputs used in BAIT calculation.
 #' @param fillWithMean \code{logical}; if \code{TRUE}, the function calculates and
@@ -23,9 +24,7 @@
 #' @importFrom terra tapp
 #' @importFrom stats setNames
 
-prepBaitInput <- function(frsds = NULL,
-                          fsfc = NULL,
-                          fhuss = NULL,
+prepBaitInput <- function(fileNames,
                           baitInput = NULL,
                           fillWithMean = FALSE) {
 
@@ -43,9 +42,9 @@ prepBaitInput <- function(frsds = NULL,
 
     return(baitInputMean)
   } else {
-    input <- list("rsds" = importData(subtype = frsds),
-                  "sfc"  = importData(subtype = fsfc),
-                  "huss" = importData(subtype = fhuss))
+    input <- list("rsds" = importData(subtype = fileNames[["rsds"]]),
+                  "sfc"  = importData(subtype = fileNames[["sfc"]]),
+                  "huss" = importData(subtype = fileNames[["huss"]]))
     return(input)
   }
 }
@@ -85,16 +84,7 @@ prepBaitInput <- function(frsds = NULL,
 #' @importFrom stringr str_sub
 #' @importFrom utils read.csv2
 
-cfac <- function(t, type, params = NULL) {
-  if (is.null(params)) {
-    # load default parameters
-    paramsMap <- read.csv2(getSystemFile("extdata", "mappings", "cfacBAITpars.csv",
-                                         package = "climbed"))
-
-    params <- setNames(lapply(paramsMap$value, function(x) eval(parse(text = x))),
-                       paramsMap$variable)
-  }
-
+cfac <- function(t, type, params) {
   return(switch(type,
                 s = params[["aRSDS"]] + params[["bRSDS"]] * t,
                 w = params[["aSFC"]] + params[["bSFC"]] * t,
