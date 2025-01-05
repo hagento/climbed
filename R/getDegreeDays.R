@@ -130,13 +130,20 @@ getDegreeDays <- function(mappingFile = NULL,
   # --- Prepare Mappings
 
   # BAIT weights
-  wBAIT <- setNames(as.list(wBAIT$value), wBAIT$variable)
+  wBAIT <- wBAIT %>%
+    pull("value", "variable") %>%
+    as.list()
 
   # population data
-  popMapping <- setNames(as.list(popMapping$file), popMapping$scenario)
+  popMapping <- popMapping  %>%
+    pull("file", "scenario") %>%
+    as.list()
 
   # scenario matrix
-  scenMatrix <- setNames(lapply(strsplit(scenMatrix$rcp, ","), trimws), scenMatrix$ssp)
+  scenMatrix <- scenMatrix %>%
+    pull("rcp", "ssp") %>%
+    strsplit(",") %>%
+    lapply(trimws)
 
 
   # calculate HDD/CDD-factors
