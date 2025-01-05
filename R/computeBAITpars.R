@@ -24,24 +24,22 @@
 #' @importFrom utils read.csv2
 #' @importFrom piamutils getSystemFile
 
-
-
 computeBAITpars <- function(model = "20crv3-era5",
-                            cacheDir = NULL) {
+                            cacheDir = "intdata/BAITpars") {
   # CHECK CACHE-----------------------------------------------------------------
 
+  # absolut package path
+  pkgPath <- getSystemFile(package = "climbed")
+
   if (!is.null(cacheDir)) {
-    fpath <- list.files(cacheDir, pattern = model, full.names = TRUE) %>%
+    fpath <- list.files(file.path(pkgPath, cacheDir), pattern = model, full.names = TRUE) %>%
       unlist()
 
     if (file.exists(fpath)) {
       print(paste0("Load parameters from cache: ", basename(fpath)))
       regPars <- rast(fpath)
 
-      return(list(x = regPars,
-                  class = "SpatRaster",
-                  unit = "(unit)",
-                  description = "Regression parameters for calcHDDCDD"))
+      return(regPars)
     } else {
       print("BAITpars file not in given cache directory - will be re-calculated.")
     }
@@ -50,15 +48,15 @@ computeBAITpars <- function(model = "20crv3-era5",
 
   # READ-IN DATA----------------------------------------------------------------
 
-  files <- read.csv2(getSystemFile("extdata", "sectoral", "BAITpars_fileMapping.csv", package = "climbed")) %>%
+  files <- read.csv2(getSystemFile("extdata", "mappings", "BAITpars_fileMapping.csv", package = "climbed")) %>%
     filter(.data[["gcm"]] == model)
 
   vars <- c("tas", "sfcwind", "rsds", "huss")
 
   data <- setNames(lapply(vars, function(v) {
-    tmp <- rast(vapply(files[[v]], function(f) importData(subtype = f),
-                       FUN.VALUE = list(), USE.NAMES = FALSE))
-    return(tmp)
+    dataVar <- rast(vapply(files[[v]], function(f) importData(subtype = f),
+                           FUN.VALUE = list(), USE.NAMES = FALSE))
+    return(dataVar)
   }),
   vars)
 

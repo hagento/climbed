@@ -1,0 +1,7 @@
+scenario;file;comment
+historical;population_histsoc_30arcmin_annual_1901_2021.nc;The data needs to be in inputdata/sources/ISIMIPbuildings/population/histsoc
+ssp1;population_ssp1_30arcmin_annual_2015_2100.nc;The data needs to be in inputdata/sources/ISIMIPbuildings/population/ssp1
+ssp2;population_ssp2_30arcmin_annual_2015_2100.nc;The data needs to be in inputdata/sources/ISIMIPbuildings/population/ssp2
+ssp3;population_ssp3_30arcmin_annual_2015_2100.nc;The data needs to be in inputdata/sources/ISIMIPbuildings/population/ssp3
+ssp4;population_ssp4_30arcmin_annual_2015_2100.nc;The data needs to be in inputdata/sources/ISIMIPbuildings/population/ssp4
+ssp5;population_ssp5_30arcmin_annual_2015_2100.nc;The data needs to be in inputdata/sources/ISIMIPbuildings/population/ssp5

@@ -5,12 +5,13 @@
 #' Imputation is used in cases where there is a temporal mismatch between near-surface atmospheric temperature
 #' data and other climate variables.
 #'
-#' @param frsds \code{character} string specifying the file path to raster data on
-#' surface downwelling shortwave radiation.
-#' @param fsfc \code{character} string specifying the file path to raster data on
-#' near-surface wind speed.
-#' @param fhuss \code{character} string specifying the file path to raster data on
-#' near-surface specific humidity.
+#' @param fileNames \code{character} A named vector of file paths extracted from \code{fileMapping}. Elements include:
+#'   \describe{
+#'     \item{tas}{Temperature data file path.}
+#'     \item{rsds}{Solar radiation data file path (included if \code{bait} is \code{TRUE}).}
+#'     \item{sfc}{Surface wind data file path (included if \code{bait} is \code{TRUE}).}
+#'     \item{huss}{Humidity data file path (included if \code{bait} is \code{TRUE}).}
+#'   }
 #' @param baitInput \code{list} containing \code{terra::SpatRaster} objects for
 #' climate data inputs used in BAIT calculation.
 #' @param fillWithMean \code{logical}; if \code{TRUE}, the function calculates and
@@ -23,9 +24,7 @@
 #' @importFrom terra tapp
 #' @importFrom stats setNames
 
-prepBaitInput <- function(frsds = NULL,
-                          fsfc = NULL,
-                          fhuss = NULL,
+prepBaitInput <- function(fileNames,
                           baitInput = NULL,
                           fillWithMean = FALSE) {
 
@@ -43,9 +42,9 @@ prepBaitInput <- function(frsds = NULL,
 
     return(baitInputMean)
   } else {
-    input <- list("rsds" = importData(subtype = frsds),
-                  "sfc"  = importData(subtype = fsfc),
-                  "huss" = importData(subtype = fhuss))
+    input <- list("rsds" = importData(subtype = fileNames[["rsds"]]),
+                  "sfc"  = importData(subtype = fileNames[["sfc"]]),
+                  "huss" = importData(subtype = fileNames[["huss"]]))
     return(input)
   }
 }
@@ -83,21 +82,14 @@ prepBaitInput <- function(frsds = NULL,
 #' @importFrom terra rast
 #' @importFrom terra subset
 #' @importFrom stringr str_sub
+#' @importFrom utils read.csv2
 
-cfac <- function(t, type, params = NULL) {
-  if (is.null(params)) {
-    params <- switch(type,
-                     s = c(100, 7),
-                     w = c(4.5, -0.025),
-                     h = c(1.1, 0.06),
-                     t = c(16))
-  }
-
+cfac <- function(t, type, params) {
   return(switch(type,
-                s = params[[1]] + params[[2]] * t,
-                w = params[[1]] + params[[2]] * t,
-                h = exp(params[[1]] + params[[2]] * t),
-                t = params[[1]],
+                s = params[["aRSDS"]] + params[["bRSDS"]] * t,
+                w = params[["aSFC"]] + params[["bSFC"]] * t,
+                h = exp(params[["aHUSS"]] + params[["bHUSS"]] * t),
+                t = params[["T"]],
                 warning("No valid parameter type specified.")))
 }
 
@@ -177,28 +169,16 @@ blend <- function(bait, tas, weight) {
 #'
 #' @returns \code{terra::SpatRaster} object containing BAIT values.
 
-compBAIT <- function(baitInput, tasData, weight = NULL, params = NULL) {
-  if (is.null(weight)) {
-    warning("Please give appropriate weights for the calculation of BAIT.")
-    weight <- list("wRSDS"  = 0.012,
-                   "wSFC"   = -0.20,
-                   "wHUSS"  = 0.05,
-                   "sig"    = 0.5,
-                   "bLower" = 15,
-                   "bUpper" = 23,
-                   "bMax"   = 0.5)
-  }
-
-  message("Calculating BAIT...")
-
+compBAIT <- function(baitInput, tasData, weight, params = NULL) {
+  # extract climate data
   solar <- baitInput$rsds
   wind  <- baitInput$sfc
   hum   <- baitInput$huss
 
   # calculate respective summands
-  s <- solar   - cfac(tasData, type = "s", params = c(params[["aRSDS"]], params[["bRSDS"]]))
-  w <- wind    - cfac(tasData, type = "w", params = c(params[["aSFC"]],  params[["bSFC"]]))
-  h <- hum     - cfac(tasData, type = "h", params = c(params[["aHUSS"]], params[["bHUSS"]]))
+  s <- solar   - cfac(tasData, type = "s", params = params)
+  w <- wind    - cfac(tasData, type = "w", params = params)
+  h <- hum     - cfac(tasData, type = "h", params = params)
   t <- tasData - cfac(tasData, type = "t", params = NULL)
 
   # calc bait
