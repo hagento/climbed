@@ -38,7 +38,7 @@ In case of questions / problems please contact Hagen Tockhorn <hagento@pik-potsd
 
 To cite package **climbed** in publications use:
 
-Tockhorn H (2024). _climbed: Climate Data Integration for Modeling Building Energy Demand_. R package version 0.1.0.9004.
+Tockhorn H (2025). _climbed: Climate Data Integration for Modeling Building Energy Demand_. R package version 0.1.0.9004.
 
 A BibTeX entry for LaTeX users is
 
@@ -46,7 +46,7 @@ A BibTeX entry for LaTeX users is
 @Manual{,
   title = {climbed: Climate Data Integration for Modeling Building Energy Demand},
   author = {Hagen Tockhorn},
-  year = {2024},
+  year = {2025},
   note = {R package version 0.1.0.9004},
 }
 ```

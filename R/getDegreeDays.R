@@ -30,7 +30,7 @@
 #'
 #' @author Hagen Tockhorn
 #'
-#' @importFrom dplyr filter
+#' @importFrom dplyr filter pull
 #' @importFrom magrittr %>%
 #' @importFrom utils read.csv
 #' @importFrom stats setNames
