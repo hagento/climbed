@@ -1,6 +1,3 @@
-# --- FUNCTIONS TO CALCULATE ANNUAL DEGREE DAYS --------------------------------
-
-
 #' Initialize Degree Days Calculation
 #'
 #' Initiates the calculation of degree days for a single scenario, model, and time period.
@@ -17,16 +14,15 @@
 #'     \item{rcp}{RCP scenario identifier.}
 #'     \item{gcm}{GCM model identifier.}
 #'   }
-#' @param pop SpatRaster with annual population data.
-#' @param ssp Shared Socioeconomic Pathway scenario.
-#' @param bait Logical indicating whether to use raw temperature or BAIT as ambient temperature.
-#' @param tLim Temperature limits for degree day calculations.
-#' @param countries SpatRaster containing the region masks.
-#' @param hddcddFactor data.frame containing pre-computed degree days.
-#' @param wBAIT (Optional) Weights for BAIT adjustments. Default is \code{NULL}.
-#' @param baitPars (Optional) Parameters for BAIT calculations. Default is \code{NULL}.
+#' @param pop \code{SpatRaster} with annual population data.
+#' @param ssp \code{character} SSP scenario.
+#' @param bait \code{logical} indicating whether to use raw temperature or BAIT as ambient temperature.
+#' @param tLim \code{numeric} Temperature limits for degree day calculations.
+#' @param hddcddFactor \code{data.frame} containing pre-computed degree days.
+#' @param wBAIT \code{numeric} (Optional) Weights for BAIT adjustments. Default is \code{NULL}.
+#' @param globalPars \code{logical} indicating whether to use global or gridded BAIT parameters.
 #'
-#' @return A data frame containing annual degree days.
+#' @returns \code{data.frame} containing annual degree days.
 #'
 #' @author Hagen Tockhorn
 #'
@@ -39,12 +35,18 @@ initCalculation <- function(fileMapping,
                             bait,
                             tLim,
                             hddcddFactor,
-                            wBAIT = NULL) {
+                            wBAIT = NULL,
+                            globalPars = FALSE) {
   # extract filenames
-  ftas  <- fileMapping[["tas"]]
-  frsds <- if (bait) fileMapping[["rsds"]]    else NULL
-  fsfc  <- if (bait) fileMapping[["sfcwind"]] else NULL
-  fhuss <- if (bait) fileMapping[["huss"]]    else NULL
+  fileNames <- c("tas" = fileMapping[["tas"]])
+  if (bait) {
+    fileNames <- c(
+      fileNames,
+      "rsds" = fileMapping[["rsds"]],
+      "sfc"  = fileMapping[["sfcwind"]],
+      "huss" = fileMapping[["huss"]]
+    )
+  }
 
   # extract temporal interval
   yStart <- fileMapping[["start"]] %>% as.numeric()
@@ -60,34 +62,36 @@ initCalculation <- function(fileMapping,
 
 
   if (bait) {
-    # bait regression parameters
-    baitPars <- computeBAITpars(model = unique(fileMapping$gcm))
-    names(baitPars) <- c("aRSDS", "bRSDS", "aSFC", "bSFC", "aHUSS", "bHUSS") # TODO: change this
+    if (isTRUE(globalPars)) {
+      # gridded bait regression parameters
+      baitPars <- computeBAITpars(model = unique(fileMapping$gcm))
+      names(baitPars) <- c("aRSDS", "bRSDS", "aSFC", "bSFC", "aHUSS", "bHUSS") # TODO: change this
+    } else {
+      # load default global parameters
+      paramsMap <- read.csv2(getSystemFile("extdata", "mappings", "cfacBAITpars.csv",
+                                           package = "climbed"))
+
+      baitPars <- setNames(lapply(paramsMap$value, function(x) eval(parse(text = x))),
+                           paramsMap$variable)
+    }
   }
 
 
-  # loop over single years and compute annual degree days
-  hddcdd <- do.call(
-    "rbind",
-    lapply(
-      seq(1, yEnd - yStart + 1),
-      function(i) {
-        message("Initiating calculating degree days for the year: ", seq(yStart, yEnd)[[i]])
 
-        compStackHDDCDD(ftas  = gsub(".nc", paste0("_", i, ".nc"), ftas),
-                        frsds = if (bait) gsub(".nc", paste0("_", i, ".nc"), frsds) else NULL,
-                        fsfc  = if (bait) gsub(".nc", paste0("_", i, ".nc"), fsfc)  else NULL,
-                        fhuss = if (bait) gsub(".nc", paste0("_", i, ".nc"), fhuss) else NULL,
-                        tlim = tLim,
-                        pop = pop,
-                        countries = countries,
-                        factors = hddcddFactor,
-                        bait = bait,
-                        wBAIT  = wBAIT,
-                        baitPars = baitPars)
-      }
-    )
-  )
+
+  # loop over single years and compute annual degree days
+  hddcdd <- do.call("rbind", lapply(seq(1, yEnd - yStart + 1), function(i) {
+    message("Initiating calculating degree days for the year: ", seq(yStart, yEnd)[[i]])
+
+    compStackHDDCDD(fileNames = fileNames,
+                    tlim = tLim,
+                    pop = pop,
+                    countries = countries,
+                    factors = hddcddFactor,
+                    bait = bait,
+                    wBAIT  = wBAIT,
+                    baitPars = baitPars)
+  }))
 
   hddcdd <- hddcdd %>%
     mutate("model" = model,
@@ -100,29 +104,38 @@ initCalculation <- function(fileMapping,
 
 
 
-#' Calculate country-wise population-weighted HDD/CDD values
+#' Calculate Country-wise Population-weighted HDD/CDD Values
 #'
-#' This function calculates country-wise population-weighted HDD/CDD values for
-#' raw ambient temperature or bias-adjusted internal temperature for a given set
-#' of limit temperatures from raster data on (various) climate variables.
+#' This function computes population-weighted Heating Degree Days (HDD) and Cooling Degree Days (CDD)
+#' for individual countries, based on raw ambient temperature or bias-adjusted internal temperature.
+#' Calculations are performed using raster data for various climate variables and specified limit temperatures.
 #'
 #' For further processing, raster objects containing degree day data are written
 #' for an interval of ten years.
 #'
-#' @param ftas file name of data on near-surface atmospherical temperature
-#' @param tlim named list of limit temperature sequences for \code{HDD} and \code{CDD}
-#' @param countries SpatRaster defining (regional) aggregation boundaries
-#' @param pop SpatRaster containing population data
-#' @param factors data frame with degree day values for \code{temp/tlim} combination
-#' @param bait boolean, BAIT is used as ambient temperature
-#' @param frsds file name of data on surface downdwelling shortwave radiation (optional)
-#' @param fsfc file name of data on near-surface wind speed (optional)
-#' @param fhuss file name of data on near-surface specific humidity (optional)
-#' @param wBAIT named list containing BAIT weights (optional)
-#' @param params SpatRaster containing regression parameters from \code{calcBAITpars} (optional)
-#' @param rasDir absolute path to directory for saving raster files
+#' @param fileNames \code{character} A named vector of file paths extracted from \code{fileMapping}. Elements include:
+#'   \describe{
+#'     \item{tas}{Temperature data file path.}
+#'     \item{rsds}{(Optional) Solar radiation data file path (included if \code{bait} is \code{TRUE}).}
+#'     \item{sfc}{(Optional) Surface wind data file path (included if \code{bait} is \code{TRUE}).}
+#'     \item{huss}{(Optional) Humidity data file path (included if \code{bait} is \code{TRUE}).}
+#'   }
+#' @param tlim \code{list} named list of temperature limit sequences for \code{HDD} and \code{CDD}.
+#' @param countries \code{terra::SpatRaster} object defining the regional aggregation boundaries.
+#' @param pop \code{terra::SpatRaster} object containing population data.
+#' @param factors \code{data.frame} containing degree day values for the combinations of \code{temp} and \code{tlim}.
+#' @param bait \code{logical}; if \code{TRUE}, BAIT is used as the ambient temperature instead of
+#' near-surface temperature.
+#' @param wBAIT (Optional) \code{list} named list containing weights for BAIT calculations.
+#' @param baitPars (Optional) \code{terra::SpatRaster} object containing regression parameters
+#' generated by \code{calcBAITpars}.
 #'
-#' @return data frame containing regional population-weighted annual degree days
+#' @returns \code{data.frame} containing regional population-weighted annual degree days (HDD/CDD).
+#'
+#' @details
+#' The function integrates various climate and population datasets to produce a regionalized summary of
+#' HDD/CDD values. It supports optional adjustments based on additional climate variables and regression
+#' parameters when using BAIT for internal temperature calculations.
 #'
 #' @author Hagen Tockhorn
 #'
@@ -130,14 +143,11 @@ initCalculation <- function(fileMapping,
 #' @importFrom stringr str_split
 #' @importFrom terra writeCDF
 
-compStackHDDCDD <- function(ftas, tlim, countries, pop, factors, bait,
-                            frsds = NULL,
-                            fsfc  = NULL,
-                            fhuss = NULL,
+compStackHDDCDD <- function(fileNames, tlim, countries, pop, factors, bait,
                             wBAIT = NULL,
                             baitPars = NULL) {
   # read cellular temperature
-  temp <- importData(subtype = ftas)
+  temp <- importData(subtype = fileNames[["tas"]])
 
   dates <- names(temp)
 
@@ -147,7 +157,7 @@ compStackHDDCDD <- function(ftas, tlim, countries, pop, factors, bait,
     tempCelsius <- temp - 273.15   # [C]
 
     # read and prepare bait input data
-    baitInput <- prepBaitInput(frsds, fsfc, fhuss) %>%
+    baitInput <- prepBaitInput(fileNames) %>%
       checkDates(tempCelsius)
 
     # calculate bait
