@@ -32,16 +32,25 @@
 #' is included in the calculations. Defaults to \code{TRUE}.
 #'
 #' @param tLim A list defining temperature limits for HDD and CDD calculations.
-#' Defaults to \code{list("HDD" = seq(9, 19), "CDD" = seq(15, 25))}.
-#' @param std A named vector of standardization parameters for temperature limits and ambient temperatures.
-#' Defaults to \code{c("tLim" = 2, "tAmb" = 2)}.
-#' @param ssp A character vector specifying the SSP scenarios to include. Defaults to \code{c("historical", "SSP2")}.
-#' @param outDir A string specifying the absolute path to the \code{output} directory. This will also
-#' contain the \code{logs} and \code{tmp} directories for log and temporary files.
-#' @param globalPars \code{logical} indicating whether to use global or gridded BAIT parameters
-#' (required if \code{bait} is TRUE).
+#' Defaults to:
+#'   \code{list("HDD" = seq(9, 19), "CDD" = seq(15, 25))}.
 #'
-#' @returns Saves a \code{.csv} file containing the calculated degree days.
+#' @param std A named vector of standard deviations for temperature limits
+#' and ambient temperatures. Defaults to:
+#'   \code{c("tLim" = 2, "tAmb" = 2)}.
+#'
+#' @param ssp A character vector specifying the SSP scenarios for population data. Defaults to:
+#'   \code{c("historical", "SSP2")}.
+#'
+#' @param outDir A string specifying the absolute path to the \code{output} directory.
+#' The output directory will also include \code{logs} and \code{tmp} subdirectories for log
+#' and temporary files. If a relative path is provided, the package directory is
+#' used as the working directory.
+#'
+#' @param fileRev (Optional) A string specifying the revision number to identify the output file.
+#'
+#' @param globalPars Logical. Indicates whether to use global or gridded BAIT parameters
+#' (required if \code{bait} is TRUE).
 #'
 #' @author Hagen Tockhorn
 #'
@@ -50,7 +59,7 @@
 #' @importFrom utils read.csv
 #' @importFrom stats setNames
 #' @importFrom piamutils getSystemFile
-#' @importFrom fs is_absolute_path
+#' @importFrom utils write.csv
 #'
 #' @export
 
@@ -245,9 +254,9 @@ getDegreeDays <- function(mappingFile = NULL,
 
   fileName <- "hddcdd"
 
-  if(is.character(fileRev)) {
+  if (is.character(fileRev)) {
     fileName <- paste0(fileName, "_", fileRev)
-  } else if(!is.null(fileRev)) {
+  } else if (!is.null(fileRev)) {
     warning("fileRev must be character")
   }
 

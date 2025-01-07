@@ -7,17 +7,17 @@ Authors@R: c(person(given = "Hagen", family = "Tockhorn",
 Maintainer: Hagen Tockhorn <hagento@pik-potsdam.de>
 Description: Prepare climate data to be used by building energy demand models.
 License: MIT + file LICENSE
+Imports:
+    dplyr,
+    ncdf4,
+    pracma,
+    raster,
+    stringr,
+    magrittr,
+    magclass,
+    madrat,
+    piamutils,
+    terra
 Encoding: UTF-8
 RoxygenNote: 7.3.2
-Imports:
-  dplyr,
-  madrat,
-  magclass,
-  magrittr,
-  ncdf4,
-  pracma,
-  piamutils,
-  raster,
-  stringr,
-  terra
-Date: 2025-01-05
+Date: 2025-01-07

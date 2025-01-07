@@ -46,7 +46,7 @@ smoothDegreeDays <- function(data, nSmoothIter = 50, transitionYears = 10) {
 
   # get single historical value per region/variable
   lastHistValues <- dataSmooth %>%
-    filter(period == endOfHistory, !is.na(.data[["value"]])) %>%
+    filter(.data[["period"]] == endOfHistory, !is.na(.data[["value"]])) %>%
     group_by(across(all_of(c("region", "variable")))) %>%
     reframe(lastHistValue = mean(.data[["value"]], na.rm = TRUE))
 

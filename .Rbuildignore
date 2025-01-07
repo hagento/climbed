@@ -12,4 +12,4 @@
 ^.*CITATION.cff$
 ^inst/intdata/BAITpars/
 ^output/
-
+^inst/intdata/trueValues/
