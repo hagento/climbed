@@ -69,6 +69,7 @@ getDegreeDays <- function(mappingFile = NULL,
                           std  = c("tLim" = 2, "tAmb" = 2),
                           ssp  = c("historical", "SSP2"),
                           outDir = "output",
+                          fileRev = NULL,
                           globalPars = FALSE) {
   # CHECKS ---------------------------------------------------------------------
 
