@@ -14,20 +14,10 @@ Imports:
     raster,
     stringr,
     magrittr,
-    terra,
-    quitte,
-    tidyr
+    magclass,
+    madrat,
+    piamutils,
+    terra
 Encoding: UTF-8
 RoxygenNote: 7.3.2
-Imports:
-  dplyr,
-  madrat,
-  magclass,
-  magrittr,
-  ncdf4,
-  pracma,
-  piamutils,
-  raster,
-  stringr,
-  terra
-Date: 2025-01-05
+Date: 2025-01-07

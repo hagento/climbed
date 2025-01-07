@@ -47,6 +47,11 @@
 #' and temporary files. If a relative path is provided, the package directory is
 #' used as the working directory.
 #'
+#' @param fileRev (Optional) A string specifying the revision number to identify the output file.
+#'
+#' @param globalPars Logical. Indicates whether to use global or gridded BAIT parameters
+#' (required if \code{bait} is TRUE).
+#'
 #' @author Hagen Tockhorn
 #'
 #' @importFrom dplyr filter pull
@@ -54,6 +59,7 @@
 #' @importFrom utils read.csv
 #' @importFrom stats setNames
 #' @importFrom piamutils getSystemFile
+#' @importFrom utils write.csv
 #'
 #' @export
 
@@ -249,9 +255,9 @@ getDegreeDays <- function(mappingFile = NULL,
 
   fileName <- "hddcdd"
 
-  if(is.character(fileRev)) {
+  if (is.character(fileRev)) {
     fileName <- paste0(fileName, "_", fileRev)
-  } else if(!is.null(fileRev)) {
+  } else if (!is.null(fileRev)) {
     warning("fileRev must be character")
   }
 

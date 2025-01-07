@@ -34,7 +34,12 @@ gatherData <- function(fileMapping,
 
     # create pattern
     pattern <- paste0(
-      "hddcdd_", fileMapping$gcm[i], "_", fileMapping$rcp[i], "_", fileMapping$start[i], "-", fileMapping$end[i], "\\.csv$"
+      "hddcdd_",
+      fileMapping$gcm[i], "_",
+      fileMapping$rcp[i], "_",
+      fileMapping$start[i], "-",
+      fileMapping$end[i],
+      "\\.csv$"
     )
 
     # find files matching the pattern in the directory
