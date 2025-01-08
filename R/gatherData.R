@@ -1,22 +1,35 @@
-#' Gather degree day outputs from multiple files
+#' Gather Heating and Cooling Degree Day Outputs
 #'
-#' Collects and combines degree day calculation outputs from multiple CSV files
-#' based on a specified file mapping.
+#' This function collects and combines degree day calculation outputs (HDDs and CDDs)
+#' from multiple CSV files based on a specified file mapping. It is designed to
+#' streamline the integration of multiple model outputs into a single data frame for
+#' further analysis and post-processing.
 #'
-#' @param fileMapping Data frame containing columns:
-#'   gcm, rcp, start, end
-#' @param outDir A string specifying the absolute path to the \code{output} directory.
+#' The function searches for files matching the pattern:
+#' \code{"hddcdd_[gcm]_[rcp]_[start]-[end].csv"} in the \code{"hddcdd"} subdirectory
+#' of the specified \code{outDir}. Each file corresponds to a specific General Circulation
+#' Model (GCM), Representative Carbon Pathway (RCP), and time period.
 #'
-#' @return Data frame combining all found output files
+#' @param fileMapping A data frame containing metadata for locating and processing
+#' degree day output files. The following columns are required:
+#'   \describe{
+#'     \item{\code{"gcm"}}{The General Circulation Model (GCM) name.}
+#'     \item{\code{"rcp"}}{The RCP scenario (e.g., RCP2.6, RCP8.5).}
+#'     \item{\code{"start"}}{The starting year of the time period.}
+#'     \item{\code{"end"}}{The ending year of the time period.}
+#'   }
 #'
-#' @details
-#' Searches for files matching pattern: "hddcdd_[gcm]_[rcp]_[start]-[end].csv"
-#' in the "hddcdd" subdirectory of \code{outDir}.
+#' @param outDir A string specifying the absolute path to the \code{output} directory
+#' where degree day outputs are stored.
+#'
+#' @return A data frame that combines all gathered degree day outputs, organized by region
+#' and scenario.
+#'
+#' @author Hagen Tockhorn
 #'
 #' @importFrom dplyr select
 #' @importFrom utils read.csv
-#'
-#' @export
+
 
 gatherData <- function(fileMapping,
                        outDir) {
