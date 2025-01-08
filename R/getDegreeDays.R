@@ -263,7 +263,7 @@ getDegreeDays <- function(mappingFile = NULL,
 
   outPath <- file.path(outDir, paste0(fileName, ".csv"))
 
-  write.csv(dataSmooth, outPath)
+  write.csv(dataSmooth, outPath, row.names = FALSE)
 
 
 }
