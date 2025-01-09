@@ -79,9 +79,7 @@ gatherData <- function(fileMapping,
 
 
   # read data
-  data <- do.call("rbind", lapply(filePaths, function(f) {
-    read.csv(f)
-  }))
+  data <- do.call(rbind, lapply(filePaths, read.csv))
 
   return(data)
 }

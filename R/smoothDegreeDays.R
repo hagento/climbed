@@ -62,7 +62,8 @@ smoothDegreeDays <- function(data, nSmoothIter = 50, transitionYears = 10) {
 
     # take mean over models
     group_by(across(-all_of(c("model", "value")))) %>%
-    reframe(value = mean(.data[["value"]]))
+    reframe(value = mean(.data[["value"]])) %>%
+    ungroup()
 
 
 
@@ -70,7 +71,7 @@ smoothDegreeDays <- function(data, nSmoothIter = 50, transitionYears = 10) {
   lastHistValues <- dataSmooth %>%
     filter(.data[["period"]] == endOfHistory, !is.na(.data[["value"]])) %>%
     group_by(across(all_of(c("region", "variable")))) %>%
-    reframe(lastHistValue = mean(.data[["value"]], na.rm = TRUE))
+    reframe(lastHistValue = mean(.data[["value"]]))
 
   # filter data w.r.t. periods
   dataSmooth <- rbind(dataSmooth %>%

@@ -36,16 +36,16 @@
 #'   \code{list("HDD" = seq(9, 19), "CDD" = seq(15, 25))}.
 #'
 #' @param std A named vector of standard deviations for temperature limits
-#' and ambient temperatures. Defaults to:
+#' and ambient temperatures in K. Defaults to:
 #'   \code{c("tLim" = 2, "tAmb" = 2)}.
 #'
 #' @param ssp A character vector specifying the SSP scenarios for population data. Defaults to:
 #'   \code{c("historical", "SSP2")}.
 #'
-#' @param outDir A string specifying the absolute path to the \code{output} directory.
+#' @param outDir A string specifying the absolute or relative path to the \code{output} directory.
 #' The output directory will also include \code{logs} and \code{tmp} subdirectories for log
-#' and temporary files. If a relative path is provided, the package directory is
-#' used as the working directory.
+#' and temporary files. If a relative path is provided, the directory is created relative
+#' to the current working directory.
 #'
 #' @param fileRev (Optional) A string specifying the revision number to identify the output file.
 #'
@@ -265,5 +265,5 @@ getDegreeDays <- function(mappingFile = NULL,
 
   write.csv(dataSmooth, outPath, row.names = FALSE)
 
-
+  return(invisible(outPath))
 }
