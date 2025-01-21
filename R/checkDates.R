@@ -20,6 +20,9 @@ checkDates <- function(baitInput, tasData) {
   # Extract time periods from temperature data
   datesT <- names(tasData)
 
+  # Extract variable names
+  baitInputVars <- names(baitInput)
+
   # Align each BAIT variable
   baitInput <- lapply(names(baitInput), function(var) {
     # Retrieve the data for the current BAIT variable
@@ -61,6 +64,8 @@ checkDates <- function(baitInput, tasData) {
 
     return(baitLayer)
   })
+
+  names(baitInput) <- baitInputVars
 
   return(baitInput)
 }
