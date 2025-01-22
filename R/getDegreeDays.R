@@ -136,7 +136,7 @@ getDegreeDays <- function(mappingFile = NULL,
   # CHECKS ---------------------------------------------------------------------
 
   # check if mapping file contains correct columns
-  mappingCols <- c("gcm", "rcp", "start", "end", "tas", "rsds", "sfc", "huss")
+  mappingCols <- c("gcm", "rcp", "start", "end", "tas", "rsds", "sfcwind", "huss")
   missingCols <- setdiff(mappingCols, colnames(fileMapping)) # Identify missing columns
   if (length(missingCols) > 0) { # Check if there are any missing columns
     stop("Please provide file mapping with correct columns.\nMissing columns:\n",
@@ -159,6 +159,10 @@ getDegreeDays <- function(mappingFile = NULL,
   wBAIT <- wBAIT %>%
     pull("value", "variable") %>%
     as.list()
+
+  # mutate values to numerics
+  wBAIT <- lapply(wBAIT, as.numeric)
+
 
   # population data
   popMapping <- popMapping  %>%
@@ -216,7 +220,7 @@ getDegreeDays <- function(mappingFile = NULL,
                              globalPars = globalPars)
 
           allJobs <- c(allJobs, job)
-          message("Job submitted successfully")
+          message("Job ", job$jobId, " submitted successfully")
         },
         error = function(e) {
           warning("Failed to submit job ", i, ": ", e$message)
