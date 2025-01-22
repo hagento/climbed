@@ -23,6 +23,10 @@
 #' @param transitionYears An integer specifying the number of years for the transition period
 #' from historical observations to projections. Defaults to \code{10}.
 #'
+#' @param nHistYears An integer specifying the number of years used for the linear regression
+#' to blend the continued historical trend into the scenario projections over a specified period
+#' in \code{transitionYears}.
+#'
 #' @return A data frame with smoothed degree day values and a seamless transition period
 #' between historical and projected data.
 #'
@@ -32,14 +36,15 @@
 #' all projections align with the historical data at the transition's start, diverging smoothly
 #' into their respective future trajectories.
 #'
-#' @importFrom dplyr ungroup group_by across all_of mutate rowwise reframe filter
-#' left_join select case_when
+#' @importFrom dplyr ungroup group_by across all_of mutate reframe filter
+#' left_join select case_when group_modify
 #' @importFrom magclass lowpass
+#' @importFrom stats lm predict
 #'
 #' @author Hagen Tockhorn
 
 
-smoothDegreeDays <- function(data, nSmoothIter = 50, transitionYears = 10) {
+smoothDegreeDays <- function(data, nSmoothIter = 50, transitionYears = 10, nHistYears = 10) {
 
   # PARAMETERS -----------------------------------------------------------------
 
@@ -66,12 +71,35 @@ smoothDegreeDays <- function(data, nSmoothIter = 50, transitionYears = 10) {
     ungroup()
 
 
+  # fit linear regression to last n (= nHistYears) values per model and create
+  # predictions for m (= transitionYears) periods
+  transitionPreds <- data %>%
+    filter(.data[["period"]] >= (endOfHistory - nHistYears),
+           .data[["period"]] <= endOfHistory,
+           .data[["rcp"]] == "historical",
+           !is.na(.data[["value"]])) %>%
 
-  # get single historical value per region/variable
-  lastHistValues <- dataSmooth %>%
-    filter(.data[["period"]] == endOfHistory, !is.na(.data[["value"]])) %>%
-    group_by(across(all_of(c("region", "variable")))) %>%
-    reframe(lastHistValue = mean(.data[["value"]]))
+    group_by(across(all_of(c("region", "variable", "tlim", "model")))) %>%
+    group_modify(~{
+      # create prediction data frame
+      predPeriods <- data.frame(
+        period = seq(endOfHistory, endOfHistory + transitionYears, 1)
+      )
+
+      # linear fit
+      fit <- lm(value ~ period, data = .x)
+
+      # predict future values
+      predPeriods$prediction <- predict(fit, newdata = predPeriods)
+      return(predPeriods)
+    }) %>%
+    ungroup() %>%
+
+    # average predictions across models
+    group_by(across(-all_of(c("model", "prediction")))) %>%
+    reframe(prediction = mean(.data[["prediction"]])) %>%
+    ungroup()
+
 
   # filter data w.r.t. periods
   dataSmooth <- rbind(dataSmooth %>%
@@ -85,19 +113,19 @@ smoothDegreeDays <- function(data, nSmoothIter = 50, transitionYears = 10) {
   # smooth transition between last historical value and projections to minimize
   # deviations caused by the preceding smoothing
   dataSmooth <- dataSmooth %>%
-    left_join(lastHistValues,
-              by = c("region", "variable")) %>%
+    left_join(transitionPreds,
+              by = c("region", "variable", "period")) %>%
     mutate(
       value = case_when(
         .data[["period"]] >= endOfHistory &
           .data[["period"]] <= (endOfHistory + transitionYears) &
-          rcp != "picontrol" & !is.na(.data[["lastHistValue"]]) & !is.na(.data[["value"]]) ~
-          .data[["lastHistValue"]] + (.data[["value"]] - .data[["lastHistValue"]]) *
+          rcp != "picontrol" & !is.na(.data[["prediction"]]) & !is.na(.data[["value"]]) ~
+          .data[["prediction"]] + (.data[["value"]] - .data[["prediction"]]) *
             ((.data[["period"]] - endOfHistory) / transitionYears),
         TRUE ~ .data[["value"]]
       )
     ) %>%
-    select(-"lastHistValue")
+    select(-"prediction")
 
   return(dataSmooth)
 }
