@@ -80,7 +80,7 @@ initCalculation <- function(fileMapping,
 
 
   # loop over single years and compute annual degree days
-  hddcdd <- do.call("rbind", lapply(seq(1, yEnd - yStart + 1), function(i) {
+  hddcdd <- do.call("rbind", lapply(seq_len(yEnd - yStart + 1), function(i) {
     message("Initiating calculating degree days for the year: ", seq(yStart, yEnd)[[i]])
 
     # add year tag
