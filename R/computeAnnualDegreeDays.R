@@ -84,7 +84,7 @@ initCalculation <- function(fileMapping,
     message("Initiating calculating degree days for the year: ", seq(yStart, yEnd)[[i]])
 
     # add year tag
-    fileNames <- lapply(fileNames, function(x) gsub("\\.nc$", paste0("_", i, ".nc"), x))
+    fileNames <- lapply(fileNames, function(x) sub("\\.nc$", paste0("_", i, ".nc"), x))
 
     compStackHDDCDD(fileNames = fileNames,
                     tlim = tLim,

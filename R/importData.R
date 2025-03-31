@@ -42,7 +42,7 @@ importData <- function(subtype) {
   # SOURCE DIRECTORY -----------------------------------------------------------
 
   # check if source folder exists
-  sourceDir <- suppressMessages(getConfig("sourcefolder"))
+  sourceDir <- getConfig("sourcefolder", verbose = FALSE)
   if (!dir.exists(sourceDir)) {
     stop("No madrat source directory found. Please define with `madrat::setConfig(\"sourcefolder\") = ...`")
   }

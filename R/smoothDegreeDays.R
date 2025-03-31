@@ -80,19 +80,7 @@ smoothDegreeDays <- function(data, nSmoothIter = 50, transitionYears = 10, nHist
            !is.na(.data[["value"]])) %>%
 
     group_by(across(all_of(c("region", "variable", "tlim", "model")))) %>%
-    group_modify(~{
-      # create prediction data frame
-      predPeriods <- data.frame(
-        period = seq(endOfHistory, endOfHistory + transitionYears, 1)
-      )
-
-      # linear fit
-      fit <- lm(value ~ period, data = .x)
-
-      # predict future values
-      predPeriods$prediction <- predict(fit, newdata = predPeriods)
-      return(predPeriods)
-    }) %>%
+    group_modify(~predTransitionValues(.x, endOfHistory, transitionYears)) %>%
     ungroup() %>%
 
     # average predictions across models
@@ -114,18 +102,42 @@ smoothDegreeDays <- function(data, nSmoothIter = 50, transitionYears = 10, nHist
   # deviations caused by the preceding smoothing
   dataSmooth <- dataSmooth %>%
     left_join(transitionPreds,
-              by = c("region", "variable", "period")) %>%
+              by = c("region", "variable", "period", "tlim")) %>%
     mutate(
-      value = case_when(
+      value = ifelse(
         .data[["period"]] >= endOfHistory &
           .data[["period"]] <= (endOfHistory + transitionYears) &
-          rcp != "picontrol" & !is.na(.data[["prediction"]]) & !is.na(.data[["value"]]) ~
-          .data[["prediction"]] + (.data[["value"]] - .data[["prediction"]]) *
-            ((.data[["period"]] - endOfHistory) / transitionYears),
-        TRUE ~ .data[["value"]]
+          .data[["rcp"]] != "picontrol" & !is.na(.data[["prediction"]]) & !is.na(.data[["value"]]),
+        .data[["prediction"]] + (.data[["value"]] - .data[["prediction"]]) *
+          ((.data[["period"]] - endOfHistory) / transitionYears),
+        .data[["value"]]
       )
     ) %>%
     select(-"prediction")
 
   return(dataSmooth)
+}
+
+
+#' Predict temporal trends via linear regression for smoothing transition between
+#' historical and projection data point
+#'
+#' @param data (grouped) data frame with necessary columns \code{period} and \code{value}
+#' @param endOfHistory upper temporal limit for historical data
+#' @param transitionYears An integer specifying the number of years for the transition period
+#' from historical observations to projections.
+
+predTransitionValues <- function(data, endOfHistory, transitionYears) {
+  # Create prediction data frame
+  predPeriods <- data.frame(
+    period = seq(endOfHistory, endOfHistory + transitionYears, 1)
+  )
+
+  # Linear fit
+  fit <- lm(value ~ period, data = data)
+
+  # Predict future values
+  predPeriods$prediction <- predict(fit, newdata = predPeriods)
+
+  return(predPeriods)
 }
