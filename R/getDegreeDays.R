@@ -11,22 +11,46 @@
 #' individually defined and submitted SLURM job. After successful completion, the job
 #' outputs are gathered, post-processed and saved as a .csv file in the \code{output} folder.
 #'
-#' @param mappingFile A string specifying the path to the mapping file containing information about the climate data
-#' Must include columns like \code{"gcm"}, \code{"rcp"}, \code{"start"}, \code{"end"}, \code{"tas"}, \code{"rsds"},
-#' \code{"sfcwind"} and \code{"huss"}.
+#' @param mappingFile A string specifying the path to the mapping file containing information about the climate data.
+#' The file must include the following columns:
+#'   \describe{
+#'     \item{\code{"gcm"}}{The General Circulation Model (GCM) name of the dataset.}
+#'     \item{\code{"rcp"}}{The RCP scenario.}
+#'     \item{\code{"start"}}{The starting year of the time period.}
+#'     \item{\code{"end"}}{The ending year of the time period.}
+#'     \item{\code{"tas"}}{The filename of the near-surface air temperature data. Needs
+#'     to exist in the \code{"ISIMIPbuildings"} directory within your madrat \code{"sourcefolder"}.}
+#'     \item{\code{"rsds"}}{The filename of the near-surface air temperature data. Needs
+#'     to exist in the \code{"ISIMIPbuildings"} directory within your madrat \code{"sourcefolder"}.}
+#'     \item{\code{"sfcwind"}}{The filename of the near-surface wind speed data. Needs
+#'     to exist in the \code{"ISIMIPbuildings"} directory within your madrat \code{"sourcefolder"}.}
+#'     \item{\code{"huss"}}{The filename of the near-surface relative humidity data. Needs
+#'     to exist in the \code{"ISIMIPbuildings"} directory within your madrat \code{"sourcefolder"}.}
+#'   }
+#'
 #' @param bait Logical. If \code{TRUE}, bias-adjusted internal temperature (BAIT)
 #' is included in the calculations. Defaults to \code{TRUE}.
-#' @param tLim A list defining temperature limits for HDD and CDD calculations.
-#' Defaults to \code{list("HDD" = seq(9, 19), "CDD" = seq(15, 25))}.
-#' @param std A named vector of standardization parameters for temperature limits and ambient temperatures.
-#' Defaults to \code{c("tLim" = 2, "tAmb" = 2)}.
-#' @param ssp A character vector specifying the SSP scenarios to include. Defaults to \code{c("historical", "SSP2")}.
-#' @param outDir A string specifying the absolute path to the \code{output} directory. This will also
-#' contain the \code{logs} and \code{tmp} directories for log and temporary files.
-#' @param globalPars \code{logical} indicating whether to use global or gridded BAIT parameters
-#' (required if \code{bait} is TRUE).
 #'
-#' @returns Saves a \code{.csv} file containing the calculated degree days.
+#' @param tLim A list defining temperature limits for HDD and CDD calculations.
+#' Defaults to:
+#'   \code{list("HDD" = seq(9, 19), "CDD" = seq(15, 25))}.
+#'
+#' @param std A named vector of standard deviations for temperature limits
+#' and ambient temperatures in K. Defaults to:
+#'   \code{c("tLim" = 2, "tAmb" = 2)}.
+#'
+#' @param ssp A character vector specifying the SSP scenarios for population data. Defaults to:
+#'   \code{c("historical", "SSP2")}.
+#'
+#' @param outDir A string specifying the absolute or relative path to the \code{output} directory.
+#' The output directory will also include \code{logs} and \code{tmp} subdirectories for log
+#' and temporary files. If a relative path is provided, the directory is created relative
+#' to the current working directory.
+#'
+#' @param fileRev (Optional) A string specifying the revision number to identify the output file.
+#'
+#' @param globalPars Logical. Indicates whether to use global or gridded BAIT parameters
+#' (required if \code{bait} is TRUE).
 #'
 #' @author Hagen Tockhorn
 #'
@@ -35,6 +59,7 @@
 #' @importFrom utils read.csv
 #' @importFrom stats setNames
 #' @importFrom piamutils getSystemFile
+#' @importFrom utils write.csv
 #'
 #' @export
 
@@ -44,6 +69,7 @@ getDegreeDays <- function(mappingFile = NULL,
                           std  = c("tLim" = 2, "tAmb" = 2),
                           ssp  = c("historical", "SSP2"),
                           outDir = "output",
+                          fileRev = NULL,
                           globalPars = FALSE) {
   # CHECKS ---------------------------------------------------------------------
 
@@ -110,7 +136,7 @@ getDegreeDays <- function(mappingFile = NULL,
   # CHECKS ---------------------------------------------------------------------
 
   # check if mapping file contains correct columns
-  mappingCols <- c("gcm", "rcp", "start", "end", "tas", "rsds", "sfc", "huss")
+  mappingCols <- c("gcm", "rcp", "start", "end", "tas", "rsds", "sfcwind", "huss")
   missingCols <- setdiff(mappingCols, colnames(fileMapping)) # Identify missing columns
   if (length(missingCols) > 0) { # Check if there are any missing columns
     stop("Please provide file mapping with correct columns.\nMissing columns:\n",
@@ -133,6 +159,10 @@ getDegreeDays <- function(mappingFile = NULL,
   wBAIT <- wBAIT %>%
     pull("value", "variable") %>%
     as.list()
+
+  # mutate values to numerics
+  wBAIT <- lapply(wBAIT, as.numeric)
+
 
   # population data
   popMapping <- popMapping  %>%
@@ -177,7 +207,6 @@ getDegreeDays <- function(mappingFile = NULL,
 
     # submit jobs and collect job details
     for (i in seq(1, nrow(files))) {
-      message("\nSubmitting job ", i, " of ", nrow(files))
       tryCatch(
         {
           job <- createSlurm(fileRow = files[i, ],
@@ -191,7 +220,7 @@ getDegreeDays <- function(mappingFile = NULL,
                              globalPars = globalPars)
 
           allJobs <- c(allJobs, job)
-          message("Job submitted successfully")
+          message("Job ", job$jobId, " submitted successfully")
         },
         error = function(e) {
           warning("Failed to submit job ", i, ": ", e$message)
@@ -210,10 +239,35 @@ getDegreeDays <- function(mappingFile = NULL,
   # extract all job IDs
   jobIds <- lapply(allJobs, function(x) x$jobId)
 
-  # wait for our specific jobs to complete (max. 12hrs)
-  waitForSlurm(jobIds, maxWaitTime = 12 * 60 * 60)
+  # wait for our specific jobs to complete (max. 6hrs)
+  waitForSlurm(jobIds, maxWaitTime = 6 * 60 * 60)
 
 
 
-  # now gather all jobs and do some further processing ...
+  # --- GATHER AND SMOOTH DEGREE DAYS
+
+  # gather outputs from slurm jobs
+  data <- gatherData(fileMapping = fileMapping, outDir = outDir)
+
+  # smooth degree days
+  dataSmooth <- smoothDegreeDays(data, nSmoothIter = 50, transitionYears = 5)
+
+
+
+
+  # OUTPUT ---------------------------------------------------------------------
+
+  fileName <- "hddcdd"
+
+  if (is.character(fileRev)) {
+    fileName <- paste0(fileName, "_", fileRev)
+  } else if (!is.null(fileRev)) {
+    warning("fileRev must be character")
+  }
+
+  outPath <- file.path(outDir, paste0(fileName, ".csv"))
+
+  write.csv(dataSmooth, outPath, row.names = FALSE)
+
+  return(invisible(outPath))
 }

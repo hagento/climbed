@@ -2,8 +2,8 @@ cff-version: 1.2.0
 message: If you use this software, please cite it using the metadata from this file.
 type: software
 title: 'climbed: Climate Data Integration for Modeling Building Energy Demand'
-version: 0.1.0.9004
-date-released: '2025-01-05'
+version: 1.0.0
+date-released: '2025-01-21'
 abstract: Prepare climate data to be used by building energy demand models.
 authors:
 - family-names: Tockhorn

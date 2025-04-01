@@ -80,8 +80,11 @@ initCalculation <- function(fileMapping,
 
 
   # loop over single years and compute annual degree days
-  hddcdd <- do.call("rbind", lapply(seq(1, yEnd - yStart + 1), function(i) {
+  hddcdd <- do.call("rbind", lapply(seq_len(yEnd - yStart + 1), function(i) {
     message("Initiating calculating degree days for the year: ", seq(yStart, yEnd)[[i]])
+
+    # add year tag
+    fileNames <- lapply(fileNames, function(x) sub("\\.nc$", paste0("_", i, ".nc"), x))
 
     compStackHDDCDD(fileNames = fileNames,
                     tlim = tLim,
@@ -213,9 +216,9 @@ compCellHDDCDD <- function(temp, typeDD, tlim, factors) {
 
   factors <- factors %>%
     filter(.data[["tLim"]] == tlim) %>%
-    dplyr::reframe(from =    .data[["T_amb_K"]] - 0.049,
-                   to =      .data[["T_amb_K"]] + 0.049,
-                   becomes = .data[["factor"]]) %>%
+    reframe(from    = .data[["T_amb_K"]] - 0.049,
+            to      = .data[["T_amb_K"]] + 0.049,
+            becomes = .data[["factor"]]) %>%
     data.matrix()
 
   # swap ambient temperature values with corresponding DD values
@@ -245,7 +248,6 @@ compCellHDDCDD <- function(temp, typeDD, tlim, factors) {
 #' @importFrom terra subset global
 
 aggCells <- function(data, weight, mask) {
-  message("Aggregating degree days to regions...")
 
   yearsData   <- names(data)
   yearsWeight <- names(weight)
