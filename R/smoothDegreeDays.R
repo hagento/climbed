@@ -17,6 +17,16 @@
 #'     \item{\code{"tlim"}}{The temperature limit associated with the degree day calculation.}
 #'   }
 #'
+#' @param fileMapping A data frame containing metadata for locating and processing
+#' degree day output files. The following columns are required:
+#'   \describe{
+#'     \item{\code{"gcm"}}{The General Circulation Model (GCM) name.}
+#'     \item{\code{"rcp"}}{The RCP scenario (e.g., RCP2.6, RCP8.5).}
+#'     \item{\code{"start"}}{The starting year of the time period.}
+#'     \item{\code{"end"}}{The ending year of the time period.}
+#'     \item{\code{"originalFile"}}{Logical indicating subset of original mapping.}
+#'   }
+#'
 #' @param nSmoothIter An integer specifying the number of iterations for lowpass smoothing.
 #' Defaults to \code{50}.
 #'
@@ -26,6 +36,9 @@
 #' @param nHistYears An integer specifying the number of years used for the linear regression
 #' to blend the continued historical trend into the scenario projections over a specified period
 #' in \code{transitionYears}.
+#'
+#' @param endOfHistory An integer specifying the upper temporal limit for historical data.
+#' Defaults to 2025.
 #'
 #' @return A data frame with smoothed degree day values and a seamless transition period
 #' between historical and projected data.
@@ -40,27 +53,40 @@
 #' left_join select case_when group_modify
 #' @importFrom magclass lowpass
 #' @importFrom stats lm predict
+#' @importFrom purrr map2
+#' @importFrom tidyr unnest
 #'
 #' @author Hagen Tockhorn
 
 
-smoothDegreeDays <- function(data, nSmoothIter = 50, transitionYears = 10, nHistYears = 10) {
-
-  # PARAMETERS -----------------------------------------------------------------
-
-  # upper temporal threshold for historical data points
-  endOfHistory <- 2020
-
-
+smoothDegreeDays <- function(data,
+                             fileMapping,
+                             nSmoothIter = 50,
+                             transitionYears = 10,
+                             nHistYears = 10,
+                             endOfHistory = 2025) {
 
   # PROCESS DATA ---------------------------------------------------------------
 
+  # extract list of files only used to fill up missing historical data points
+  excludeEntries <- fileMapping %>%
+    filter(.data$originalFile == FALSE) %>%
+    mutate(period = map2(.data$start, .data$end, seq)) %>%
+    select("model" = "gcm", "rcp", "period") %>%
+    unnest("period")
+
+
   dataSmooth <- data %>%
+
+    # fill up historical data
+    fillHistory(endOfHistory = endOfHistory) %>%
+
+    # remove entries only added for historical fill-up
+    anti_join(excludeEntries, by = c("model", "rcp", "period")) %>%
 
     # smooth model data before averaging to avoid impact of outliers
     group_by(across(-all_of(c("period", "value")))) %>%
-    mutate(value = ifelse(.data[["period"]] <= endOfHistory |
-                            .data[["rcp"]] == "picontrol",
+    mutate(value = ifelse(.data[["period"]] <= endOfHistory,
                           .data[["value"]],
                           lowpass(.data[["value"]], i = nSmoothIter))) %>%
     ungroup() %>%

@@ -52,6 +52,12 @@
 #' @param globalPars Logical. Indicates whether to use global or gridded BAIT parameters
 #' (required if \code{bait} is TRUE).
 #'
+#' @param endOfHistory An integer specifying the upper temporal limit for historical data.
+#' Defaults to 2025.
+#'
+#' @param packagePath (Optional) A string specifying the path to the package for development mode.
+#' If provided, the SLURM jobs will use devtools::load_all() instead of library() to load the package.
+#'
 #' @author Hagen Tockhorn
 #'
 #' @importFrom dplyr filter pull
@@ -70,7 +76,10 @@ getDegreeDays <- function(mappingFile = NULL,
                           ssp  = c("historical", "SSP2"),
                           outDir = "output",
                           fileRev = NULL,
-                          globalPars = FALSE) {
+                          globalPars = FALSE,
+                          endOfHistory = 2025,
+                          packagePath = NULL) {
+
   # CHECKS ---------------------------------------------------------------------
 
   # check for mapping file
@@ -176,6 +185,40 @@ getDegreeDays <- function(mappingFile = NULL,
     lapply(trimws)
 
 
+  # indicate original mapping entries
+  fileMapping <- fileMapping %>%
+    mutate(originalFile = TRUE)
+
+  # if necessary, add files to fill up missing historical data points
+  if (max(fileMapping$end[fileMapping$rcp == "historical"]) < endOfHistory) {
+    # check if there are RCP 2.6 files that cover the required period
+    # AND check if data from all possible models (five) exists
+    requiredCoverage <- any(
+      fileMapping$rcp == "2.6" &
+        fileMapping$start <= max(fileMapping$end[fileMapping$rcp == "historical"]) + 1 &
+        fileMapping$end >= endOfHistory
+    ) && length(unique(fileMapping$gcm[fileMapping$rcp == "2.6"])) == 5
+
+    if (!requiredCoverage) {
+      fullMappingFile <- getSystemFile("extdata", "mappings", "ISIMIPbuildings_fileMapping.csv",
+                                       package = "climbed")
+
+      fileMapping <- fullMappingFile %>%
+        read.csv2() %>%
+
+        # ensure the files cover the period from the end of historical data to endOfHistory
+        filter(.data$rcp == "2.6",
+               (.data$start <= max(fileMapping$end[fileMapping$rcp == "historical"]) + 1 &
+                  .data$end >= endOfHistory)) %>%
+
+        # filter out duplicated entries
+        anti_join(fileMapping, by = c("gcm", "rcp", "start", "end")) %>%
+        mutate(originalFile = FALSE) %>%
+        rbind(fileMapping)
+    }
+  }
+
+
   # calculate HDD/CDD-factors
   hddcddFactor <- compFactors(tLow = tLow, tUp = tUp, tLim, std[["tAmb"]], std[["tLim"]])
 
@@ -217,7 +260,8 @@ getDegreeDays <- function(mappingFile = NULL,
                              hddcddFactor = hddcddFactor,
                              wBAIT = wBAIT,
                              outDir = outDir,
-                             globalPars = globalPars)
+                             globalPars = globalPars,
+                             packagePath = packagePath)
 
           allJobs <- c(allJobs, job)
           message("Job ", job$jobId, " submitted successfully")
@@ -228,6 +272,7 @@ getDegreeDays <- function(mappingFile = NULL,
       )
     }
   }
+
 
   if (length(allJobs) == 0) {
     stop("No jobs were successfully submitted")
@@ -250,7 +295,11 @@ getDegreeDays <- function(mappingFile = NULL,
   data <- gatherData(fileMapping = fileMapping, outDir = outDir)
 
   # smooth degree days
-  dataSmooth <- smoothDegreeDays(data, nSmoothIter = 50, transitionYears = 5)
+  dataSmooth <- smoothDegreeDays(data,
+                                 fileMapping,
+                                 nSmoothIter = 100,
+                                 transitionYears = 5,
+                                 endOfHistory = endOfHistory)
 
 
 
