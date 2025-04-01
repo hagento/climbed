@@ -11,6 +11,9 @@
 #' @param outDir \code{character} Absolute path to the output directory, containing logs/ and tmp/
 #' @param globalPars \code{logical} indicating whether to use global or gridded BAIT parameters
 #' (required if \code{bait} is TRUE).
+#' @param packagePath \code{character} (Optional) Path to the package for development mode.
+#' If provided, the SLURM jobs will use devtools::load_all() with this path.
+#' If NULL (default), the installed climbed package will be loaded.
 #'
 #' @returns \code{list} containing job details:
 #'   - jobName: Name of the Slurm job
@@ -18,7 +21,7 @@
 #'   - outputFile: Path to output file
 #'   - slurmCommand: Slurm submission command
 #'   - jobId: Slurm job ID
-#'   - batch_tag: Unique batch identifier
+#'   - batchTag: Unique batch identifier
 #'
 #' @author Hagen Tockhorn
 #'
@@ -36,7 +39,8 @@ createSlurm <- function(fileRow,
                         wBAIT,
                         jobConfig = list(),
                         outDir = "output",
-                        globalPars = FALSE) {
+                        globalPars = FALSE,
+                        packagePath = NULL) {
   # PARAMETERS -----------------------------------------------------------------
 
   # define default slurm job configuration
@@ -64,16 +68,16 @@ createSlurm <- function(fileRow,
   dir.create(file.path(outDir, "hddcdd"), recursive = TRUE, showWarnings = FALSE)
 
   # create a unique tag for this batch of files
-  batch_tag <- format(Sys.time(), "%Y%m%d_%H%M%S")
+  batchTag <- format(Sys.time(), "%Y%m%d_%H%M%S")
 
   # save files temporarily with a time tag to remove after successful processing
   pop_names <- names(pop)
-  saveRDS(pop_names, sprintf("%s/pop_names_%s.rds", tmpDir, batch_tag))
-  writeCDF(pop, sprintf("%s/pop_%s.nc", tmpDir, batch_tag), overwrite = TRUE)
+  saveRDS(pop_names, sprintf("%s/pop_names_%s.rds", tmpDir, batchTag))
+  writeCDF(pop, sprintf("%s/pop_%s.nc", tmpDir, batchTag), overwrite = TRUE)
 
-  saveRDS(tLim, sprintf("%s/tLim_%s.rds", tmpDir, batch_tag))
-  saveRDS(hddcddFactor, sprintf("%s/hddcddFactor_%s.rds", tmpDir, batch_tag))
-  saveRDS(wBAIT, sprintf("%s/wBAIT_%s.rds", tmpDir, batch_tag))
+  saveRDS(tLim, sprintf("%s/tLim_%s.rds", tmpDir, batchTag))
+  saveRDS(hddcddFactor, sprintf("%s/hddcddFactor_%s.rds", tmpDir, batchTag))
+  saveRDS(wBAIT, sprintf("%s/wBAIT_%s.rds", tmpDir, batchTag))
 
   # output file
   outputFile <- file.path(outDir, "hddcdd",
@@ -86,6 +90,15 @@ createSlurm <- function(fileRow,
 
   # write slurm job script
   jobScript <- tempfile(pattern = "initcalc_job_", fileext = ".slurm")
+
+  # determine package loading approach
+  if (!is.null(packagePath)) {
+    # use provided package path with load_all
+    packageLoadingCode <- sprintf("devtools::load_all(\"%s\")", packagePath)
+  } else {
+    # use standard library loading - assuming package is installed
+    packageLoadingCode <- "library(climbed)"
+  }
 
   writeLines(c(
     "#!/bin/bash",
@@ -102,16 +115,16 @@ createSlurm <- function(fileRow,
     "",
     "R --no-save <<EOF",
     "library(devtools)",
-    sprintf("devtools::load_all(\"/p/tmp/hagento/dev/climbed\")"),   # not sure how to properly manage this yet
+    packageLoadingCode,   # use dynamic loading approach
     "",
     "# Load and restore raster with names",
-    sprintf("pop <- terra::rast('%s/pop_%s.nc')", tmpDir, batch_tag),
-    sprintf("pop_names <- readRDS('%s/pop_names_%s.rds')", tmpDir, batch_tag),
+    sprintf("pop <- terra::rast('%s/pop_%s.nc')", tmpDir, batchTag),
+    sprintf("pop_names <- readRDS('%s/pop_names_%s.rds')", tmpDir, batchTag),
     "names(pop) <- pop_names",
     "",
-    sprintf("tLim <- readRDS('%s/tLim_%s.rds')", tmpDir, batch_tag),
-    sprintf("hddcddFactor <- readRDS('%s/hddcddFactor_%s.rds')", tmpDir, batch_tag),
-    sprintf("wBAIT <- readRDS('%s/wBAIT_%s.rds')", tmpDir, batch_tag),
+    sprintf("tLim <- readRDS('%s/tLim_%s.rds')", tmpDir, batchTag),
+    sprintf("hddcddFactor <- readRDS('%s/hddcddFactor_%s.rds')", tmpDir, batchTag),
+    sprintf("wBAIT <- readRDS('%s/wBAIT_%s.rds')", tmpDir, batchTag),
     "",
     sprintf("fileMapping <- data.frame(
       gcm = '%s',
@@ -123,8 +136,8 @@ createSlurm <- function(fileRow,
       sfcwind = '%s',
       huss = '%s',
       stringsAsFactors = FALSE)",
-      fileRow$gcm, fileRow$rcp, fileRow$start, fileRow$end,
-      fileRow$tas, fileRow$rsds, fileRow$sfcwind, fileRow$huss
+            fileRow$gcm, fileRow$rcp, fileRow$start, fileRow$end,
+            fileRow$tas, fileRow$rsds, fileRow$sfcwind, fileRow$huss
     ),
     "",
     "result <- initCalculation(",
@@ -141,7 +154,7 @@ createSlurm <- function(fileRow,
     sprintf("write.csv(result, '%s', row.names = FALSE)", outputFile),
     "",
     "# Clean up all temporary files",
-    sprintf("unlink(list.files('%s', pattern='%s', full.names=TRUE))", tmpDir, batch_tag),
+    sprintf("unlink(list.files('%s', pattern='%s', full.names=TRUE))", tmpDir, batchTag),
     "EOF"
   ), jobScript)
 
@@ -158,7 +171,7 @@ createSlurm <- function(fileRow,
                         outputFile = outputFile,
                         slurmCommand = slurmCommand,
                         jobId = jobId,
-                        batch_tag = batch_tag)))
+                        batchTag = batchTag)))
 }
 
 
