@@ -121,28 +121,41 @@ smoothDegreeDays <- function(data,
                                .data[["period"]] <= endOfHistory),
                       dataSmooth %>%
                         filter(.data[["rcp"]] != "historical",
-                               .data[["period"]] >= endOfHistory))
+                               .data[["period"]] > endOfHistory))
 
 
-  # smooth transition between last historical value and projections to minimize
-  # deviations caused by the preceding smoothing
+  # merge historical and scenario data
   dataSmooth <- dataSmooth %>%
     left_join(transitionPreds,
               by = c("region", "variable", "period", "tlim")) %>%
     mutate(
       value = ifelse(
+        # Condition: In transition period with both prediction and value available
         .data[["period"]] >= endOfHistory &
           .data[["period"]] <= (endOfHistory + transitionYears) &
-          .data[["rcp"]] != "picontrol" & !is.na(.data[["prediction"]]) & !is.na(.data[["value"]]),
-        .data[["prediction"]] + (.data[["value"]] - .data[["prediction"]]) *
-          ((.data[["period"]] - endOfHistory) / transitionYears),
+          !is.na(.data[["prediction"]]) &
+          !is.na(.data[["value"]]),
+
+        # apply weighted transition
+        {
+          # calculate normalized position in transition (0 to 1)
+          t <- (.data[["period"]] - endOfHistory) / transitionYears
+
+          # use cosine-based weighting for smoother S-curve transition
+          weight <- 0.5 * (1 - cos(t * pi))
+
+          .data[["prediction"]] + (.data[["value"]] - .data[["prediction"]]) * weight
+        },
+
+        # else: keep original value
         .data[["value"]]
       )
     ) %>%
-    select(-"prediction")
+  select(-"prediction")
 
   return(dataSmooth)
 }
+
 
 
 #' Predict temporal trends via linear regression for smoothing transition between
