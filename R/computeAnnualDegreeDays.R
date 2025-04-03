@@ -53,7 +53,8 @@ initCalculation <- function(fileMapping,
 
 
   # extract filenames
-  fileNames <- c("tas" = fileMapping[["tas"]])
+  fileNames <- c("tas" = fileMapping[["tas"]],
+                 "gcm" = fileMapping[["gcm"]])
   if (bait) {
     fileNames <- c(
       fileNames,
@@ -76,7 +77,9 @@ initCalculation <- function(fileMapping,
   countries <- importData(subtype = "countrymasks-fractional_30arcmin.nc")
 
 
-  if (bait) {
+  baitPars <- NULL
+
+  if (isTRUE(bait)) {
     if (isTRUE(globalPars)) {
       # gridded bait regression parameters
       baitPars <- computeBAITpars(model = unique(fileMapping$gcm))
@@ -182,7 +185,7 @@ compStackHDDCDD <- function(fileNames, tlim, countries, pop, factors, bait,
   dates <- names(temp)
 
   # optional: transform raw temperature into BAIT
-  if (bait) {
+  if (isTRUE(bait)) {
     # note: easier to do in [C]
     tempCelsius <- temp - 273.15   # [C]
 
@@ -312,11 +315,11 @@ aggCells <- function(data, weight, mask, noCC = FALSE) {
   } else {
     # For normal case, use matching years
     yearsData <- names(data)
-  yearsWeight <- names(weight)
+    yearsWeight <- names(weight)
 
-  if (!all(yearsData %in% yearsWeight)) {
-    stop("Time periods of raster file and aggregation weights do not match.")
-  }
+    if (!all(yearsData %in% yearsWeight)) {
+      stop("Time periods of raster file and aggregation weights do not match.")
+    }
 
     yearsToProcess <- yearsData
   }
@@ -328,24 +331,24 @@ aggCells <- function(data, weight, mask, noCC = FALSE) {
 
     # Mask data and weights to considered regions
     regData <- yearData * subset(weight, y) * mask
-        regWeight <- subset(weight, y) * mask
+    regWeight <- subset(weight, y) * mask
 
     # Aggregate regional data
     regDataAgg <- terra::global(regData, "sum", na.rm = TRUE)$sum
-        regWeightAgg <- terra::global(regWeight, "sum", na.rm = TRUE)$sum
+    regWeightAgg <- terra::global(regWeight, "sum", na.rm = TRUE)$sum
 
     # Calculate weighted sum
-        weightedAgg <- regDataAgg / regWeightAgg
+    weightedAgg <- regDataAgg / regWeightAgg
 
     # Create result data frame
     aggData <- data.frame(
       "region" = names(mask),
-                              "period" = y,
+      "period" = y,
       "value" = round(weightedAgg, 3)
     )
 
-        rownames(aggData) <- c()
-        return(aggData)
+    rownames(aggData) <- c()
+    return(aggData)
   }))
   return(hddcddAgg)
 }

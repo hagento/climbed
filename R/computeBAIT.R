@@ -179,7 +179,7 @@ compBAIT <- function(baitInput, tasData, weight, params = NULL) {
   s <- solar   - cfac(tasData, type = "s", params = params)
   w <- wind    - cfac(tasData, type = "w", params = params)
   h <- hum     - cfac(tasData, type = "h", params = params)
-  t <- tasData - cfac(tasData, type = "t", params = NULL)
+  t <- tasData - cfac(tasData, type = "t", params = params)
 
   # calc bait
   bait <- tasData + weight[["wRSDS"]] * s + weight[["wSFC"]] * w + weight[["wHUSS"]] * h * t
