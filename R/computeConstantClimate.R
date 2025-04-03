@@ -89,39 +89,33 @@ computeConstantClimate <- function(fileMapping, ssp, popMapping, nHistYears, gri
     # read in population data
     pop <- importData(subtype = popMapping[[s]])
 
-    # process models
-    do.call(rbind, lapply(names(resultList), function(model) {
+    # process variables (HDD, CDD)
+    do.call(rbind, lapply(names(resultList), function(variable) {
+      # process temperature limits
+      do.call(rbind, lapply(names(resultList[[variable]]), function(tlim) {
 
-      # process variables (HDD, CDD)
-      do.call(rbind, lapply(names(resultList[[model]]), function(variable) {
+        # Combine all rasters into a single SpatRaster (across models and years)
+        allRasters <- lapply(names(resultList[[variable]][[tlim]]), function(model) {
+          resultList[[variable]][[tlim]][[model]]
+        })
 
-        # process temperature limits
-        do.call(rbind, lapply(names(resultList[[model]][[variable]]), function(tlim) {
+        # Stack all rasters and calculate the mean
+        dataMean <- do.call(c, allRasters) %>%
+          mean()
 
-          # get SpatRaster with all years
-          dataMean <- resultList[[model]][[variable]][[tlim]] %>%
-            mean()
+        # aggregate using population weights
+        aggData <- aggCells(dataMean, pop, countries, noCC = TRUE) %>%
+          mutate(period = as.numeric(.data$period),
+                 model = "model_average",
+                 variable = variable,
+                 tlim = tlim,
+                 ssp = s,
+                 rcp = "noCC")
 
-          # aggregate using population weights
-          aggData <- aggCells(dataMean, pop, countries, noCC = TRUE) %>%
-            mutate(period = as.numeric(.data$period),
-                   model = model,
-                   variable = variable,
-                   tlim = tlim,
-                   ssp = s,
-                   rcp = "noCC")
-
-          return(aggData)
-        }))
+        return(aggData)
       }))
     }))
   }))
-
-
-  # clear all raster files to avoid possible mix-ups in future runs
-  allGridFiles <- list.files(gridDataDir, pattern = "\\.tif", full.names = TRUE)
-  file.remove(allGridFiles)
-
 
   return(hddcddNoCC)
 }
@@ -131,9 +125,9 @@ computeConstantClimate <- function(fileMapping, ssp, popMapping, nHistYears, gri
 #' Import and Organize Degree Day Data for Constant Climate Calculation
 #'
 #' This internal helper function imports pre-calculated heating and cooling degree day data from
-#' a list of .tif files and organizes it into a nested list structure by climate model,
-#' variable (HDD/CDD), and temperature limit. The resulting structure allows for calculating
-#' temporal averages to represent constant climate conditions.
+#' a list of .tif files and organizes it into a nested list structure by variable (HDD/CDD),
+#' temperature limit, and climate model. The resulting structure allows for easily averaging
+#' across all climate models.
 #'
 #' @param fileList A character vector of full file paths to .tif files containing degree day data.
 #' The filenames should follow a specific pattern where the model name is at the beginning
@@ -142,12 +136,12 @@ computeConstantClimate <- function(fileMapping, ssp, popMapping, nHistYears, gri
 #' should follow the pattern "variable_number", where variable typically represents HDD or CDD
 #' and number represents the temperature threshold.
 #'
-#' @return A nested list organized by model, variable, and temperature limit, containing
+#' @return A nested list organized by variable, temperature limit, and model, containing
 #' SpatRaster objects with layers representing different years. The structure is:
 #'   \describe{
-#'     \item{\code{model}}{The climate model name}
 #'     \item{\code{variable}}{The degree day variable (e.g., "HDD", "CDD")}
 #'     \item{\code{number}}{The temperature limit identifier}
+#'     \item{\code{model}}{The climate model name}
 #'   }
 #'
 #' @author Hagen Tockhorn
@@ -157,14 +151,8 @@ computeConstantClimate <- function(fileMapping, ssp, popMapping, nHistYears, gri
 #' @importFrom magrittr %>%
 
 .importNoCCData <- function(fileList) {
-  # Get unique models
-  models <- vapply(fileList, function(file) {
-    basename(file) %>% str_extract("^[^_]+(?=_)")
-  }, character(1))
-  models <- unique(models)
-
-  # Initialize nested list structure
-  resultList <- setNames(vector("list", length(models)), models)
+  # Initialize variable > tlim > model structure
+  resultList <- list()
 
   # Process files
   for (file in fileList) {
@@ -184,8 +172,8 @@ computeConstantClimate <- function(fileMapping, ssp, popMapping, nHistYears, gri
     variables <- unique(vapply(varNumPairs, function(x) x$variable, character(1)))
 
     for (variable in variables) {
-      if (is.null(resultList[[model]][[variable]])) {
-        resultList[[model]][[variable]] <- list()
+      if (is.null(resultList[[variable]])) {
+        resultList[[variable]] <- list()
       }
 
       # Filter pairs with matching variable
@@ -195,20 +183,24 @@ computeConstantClimate <- function(fileMapping, ssp, popMapping, nHistYears, gri
       numbers <- unique(vapply(matchingPairs, function(x) x$number, character(1)))
 
       for (number in numbers) {
+        if (is.null(resultList[[variable]][[number]])) {
+          resultList[[variable]][[number]] <- list()
+        }
+
         layerName <- paste0(variable, "_", number)
         if (layerName %in% layerNames) {
           singleLayer <- rastData[[layerName]]
           names(singleLayer) <- as.character(year)
 
-          # Check if this element exists
-          if (is.null(resultList[[model]][[variable]][[number]])) {
-            resultList[[model]][[variable]][[number]] <- singleLayer
+          # Add to the model list for this variable/number combination
+          if (is.null(resultList[[variable]][[number]][[model]])) {
+            resultList[[variable]][[number]][[model]] <- singleLayer
           } else {
             # Check if existing raster has layers
-            if (nlyr(resultList[[model]][[variable]][[number]]) > 0) {
-              resultList[[model]][[variable]][[number]] <- c(resultList[[model]][[variable]][[number]], singleLayer)
+            if (nlyr(resultList[[variable]][[number]][[model]]) > 0) {
+              resultList[[variable]][[number]][[model]] <- c(resultList[[variable]][[number]][[model]], singleLayer)
             } else {
-              resultList[[model]][[variable]][[number]] <- singleLayer
+              resultList[[variable]][[number]][[model]] <- singleLayer
             }
           }
         }
