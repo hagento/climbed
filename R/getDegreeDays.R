@@ -55,6 +55,10 @@
 #' @param endOfHistory An integer specifying the upper temporal limit for historical data.
 #' Defaults to 2025.
 #'
+#' @param noCC \code{logical} indicating whether to compute a no-climate-change scenario.
+#'        If \code{TRUE}, the function will calculate degree days assuming constant climate conditions.
+#'        Default is \code{FALSE}.
+#'
 #' @param packagePath (Optional) A string specifying the path to the package for development mode.
 #' If provided, the SLURM jobs will use devtools::load_all() instead of library() to load the package.
 #'
@@ -78,6 +82,7 @@ getDegreeDays <- function(mappingFile = NULL,
                           fileRev = NULL,
                           globalPars = FALSE,
                           endOfHistory = 2025,
+                          noCC = FALSE,
                           packagePath = NULL) {
 
   # CHECKS ---------------------------------------------------------------------
@@ -144,12 +149,15 @@ getDegreeDays <- function(mappingFile = NULL,
 
   # CHECKS ---------------------------------------------------------------------
 
-  # check if mapping file contains correct columns
-  mappingCols <- c("gcm", "rcp", "start", "end", "tas", "rsds", "sfcwind", "huss")
-  missingCols <- setdiff(mappingCols, colnames(fileMapping)) # Identify missing columns
-  if (length(missingCols) > 0) { # Check if there are any missing columns
-    stop("Please provide file mapping with correct columns.\nMissing columns:\n",
-         paste(missingCols, collapse = ", "))
+  if (!is.null(fileMapping)) {
+    # check if mapping file contains correct columns
+    mappingCols <- c("gcm", "rcp", "start", "end", "tas", "rsds", "sfcwind", "huss")
+    missingCols <- setdiff(mappingCols, colnames(fileMapping)) # Identify missing columns
+
+    if (length(missingCols) > 0) { # Check if there are any missing columns
+      stop("Please provide file mapping with correct columns.\nMissing columns:\n",
+           paste(missingCols, collapse = ", "))
+    }
   }
 
   # create output directory if it doesn't exist
@@ -183,6 +191,15 @@ getDegreeDays <- function(mappingFile = NULL,
     pull("rcp", "ssp") %>%
     strsplit(",") %>%
     lapply(trimws)
+
+
+  # if no file mapping is given for noCC-case, use default
+  if (is.null(fileMapping) && isTRUE(noCC)) {
+    fileMapping <- read.csv2(getSystemFile("extdata", "mappings",
+                                           "ISIMIPbuildings_fileMapping_noCC.csv",
+                                           package = "climbed"),
+                             stringsAsFactors = FALSE)
+  }
 
 
   # indicate original mapping entries
@@ -261,6 +278,7 @@ getDegreeDays <- function(mappingFile = NULL,
                              wBAIT = wBAIT,
                              outDir = outDir,
                              globalPars = globalPars,
+                             noCC = noCC,
                              packagePath = packagePath)
 
           allJobs <- c(allJobs, job)
@@ -293,6 +311,23 @@ getDegreeDays <- function(mappingFile = NULL,
 
   # gather outputs from slurm jobs
   data <- gatherData(fileMapping = fileMapping, outDir = outDir)
+
+
+  # if specified, calculate degree days for constant climate
+  if (isTRUE(noCC)) {
+    # extract directory for grid data
+    gridDataDir <- lapply(allJobs, function(x) x$gridDataDir) %>%
+      unique()
+
+    dataNoCC <- computeConstantClimate(fileMapping = fileMapping,
+                                       ssp = ssp,
+                                       popMapping = popMapping,
+                                       nHistYears = 5,
+                                       gridDataDir = gridDataDir)
+
+    data <- rbind(data, dataNoCC)
+  }
+
 
   # smooth degree days
   dataSmooth <- smoothDegreeDays(data,

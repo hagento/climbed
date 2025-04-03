@@ -11,6 +11,9 @@
 #' @param outDir \code{character} Absolute path to the output directory, containing logs/ and tmp/
 #' @param globalPars \code{logical} indicating whether to use global or gridded BAIT parameters
 #' (required if \code{bait} is TRUE).
+#' @param noCC \code{logical} indicating whether to compute a no-climate-change scenario.
+#'        If \code{TRUE}, the function will calculate degree days assuming constant climate conditions.
+#'        Default is \code{FALSE}.
 #' @param packagePath \code{character} (Optional) Path to the package for development mode.
 #' If provided, the SLURM jobs will use devtools::load_all() with this path.
 #' If NULL (default), the installed climbed package will be loaded.
@@ -40,6 +43,7 @@ createSlurm <- function(fileRow,
                         jobConfig = list(),
                         outDir = "output",
                         globalPars = FALSE,
+                        noCC = noCC,
                         packagePath = NULL) {
   # PARAMETERS -----------------------------------------------------------------
 
@@ -66,6 +70,13 @@ createSlurm <- function(fileRow,
   dir.create(tmpDir, recursive = TRUE, showWarnings = FALSE)
   dir.create(config$logsDir, recursive = TRUE, showWarnings = FALSE)
   dir.create(file.path(outDir, "hddcdd"), recursive = TRUE, showWarnings = FALSE)
+
+  # create output directory for grid data in noCC-case
+  gridDataDir <- NULL
+  if (isTRUE(noCC)) {
+    gridDataDir <- file.path(outDir, "hddcddGrid")
+    dir.create(gridDataDir, recursive = TRUE, showWarnings = FALSE)
+  }
 
   # create a unique tag for this batch of files
   batchTag <- format(Sys.time(), "%Y%m%d_%H%M%S")
@@ -148,7 +159,9 @@ createSlurm <- function(fileRow,
     "  pop = pop,",
     "  hddcddFactor = hddcddFactor,",
     "  wBAIT = wBAIT,",
-    sprintf("  globalPars = '%s'", globalPars),
+    sprintf("  globalPars = '%s',", globalPars),
+    sprintf("  noCC = '%s',", noCC),
+    sprintf("  gridDataDir = '%s'", gridDataDir),
     ")",
     "",
     sprintf("write.csv(result, '%s', row.names = FALSE)", outputFile),
@@ -171,7 +184,8 @@ createSlurm <- function(fileRow,
                         outputFile = outputFile,
                         slurmCommand = slurmCommand,
                         jobId = jobId,
-                        batchTag = batchTag)))
+                        batchTag = batchTag,
+                        gridDataDir = gridDataDir)))
 }
 
 
