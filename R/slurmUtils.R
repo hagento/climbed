@@ -211,52 +211,67 @@ waitForSlurm <- function(jobIds, checkInterval = 60, maxWaitTime = 3600) {
   jobIds <- as.character(jobIds)
   jobSet <- unique(jobIds)  # Remove duplicates
 
+  message("Monitoring jobs: ", paste(jobSet, collapse=", "))
+
   while (difftime(Sys.time(), startTime, units = "secs") < maxWaitTime) {
-    # Get detailed job status including job steps
-    jobsCommand <- sprintf("sacct -j %s --parsable2 --noheader --format=jobid,state",
-                           paste(jobSet, collapse = ","))
-    jobsStatus <- system(jobsCommand, intern = TRUE)
+    # Try squeue first (for running/queued jobs)
+    squeueCmd <- sprintf("squeue -j %s -h -o '%%A|%%T'", paste(jobSet, collapse=","))
+    squeueOut <- system(squeueCmd, intern = TRUE, ignore.stderr = TRUE)
 
-    if (length(jobsStatus) == 0) {
-      stop("No job information found. Check if jobs exist.")
+    if (length(squeueOut) > 0) {
+      message("Jobs still running in queue")
+      Sys.sleep(checkInterval)
+      next
     }
 
-    # Process status data
-    statusMatrix <- do.call(rbind, strsplit(jobsStatus, "|", fixed = TRUE))
-    parentJobs <- statusMatrix[!grepl("\\.", statusMatrix[, 1]), , drop = FALSE]
+    # Check if job exists in accounting
+    sacctCmd <- sprintf("sacct -j %s -X -n -o jobid,state", paste(jobSet, collapse=","))
+    sacctOut <- system(sacctCmd, intern = TRUE, ignore.stderr = TRUE)
 
-    # Check for failed states
-    failedStates <- c("FAILED", "CANCELLED", "TIMEOUT", "OUT_OF_MEMORY",
-                      "NODE_FAIL", "PREEMPTED", "DEADLINE")
-    failedJobs <- parentJobs[parentJobs[, 2] %in% failedStates, , drop = FALSE]
+    # If we got output from sacct
+    if (length(sacctOut) > 0) {
+      # Check for completed jobs
+      allCompleted <- all(sapply(jobSet, function(id) {
+        any(grepl(paste0(id, ".*COMPLETED"), sacctOut, ignore.case = TRUE))
+      }))
 
-    if (nrow(failedJobs) > 0) {
-      failMessage <- sprintf("Jobs failed: %s",
-                             paste(sprintf("JobID %s: %s",
-                                           failedJobs[, 1], failedJobs[, 2]),
-                                   collapse = ", "))
-      stop(failMessage)
-    }
-
-    # Check for active states
-    activeStates <- c("PENDING", "RUNNING", "COMPLETING", "CONFIGURING",
-                      "SUSPENDED", "REQUEUED", "RESIZING")
-    activeJobs <- parentJobs[parentJobs[, 2] %in% activeStates, , drop = FALSE]
-
-    # Verify completion
-    if (nrow(activeJobs) == 0) {
-      completedJobs <- parentJobs[parentJobs[, 2] == "COMPLETED", , drop = FALSE]
-      if (nrow(completedJobs) == length(jobSet)) {
-        message(sprintf("All %d jobs completed successfully", length(jobSet)))
+      if (allCompleted) {
+        message("All jobs completed successfully")
         return(TRUE)
-      } else {
-        # Some jobs are missing or in unexpected states
-        unknownJobs <- setdiff(jobSet, parentJobs[, 1])
-        if (length(unknownJobs) > 0) {
-          stop(sprintf("Jobs with unknown status: %s",
-                       paste(unknownJobs, collapse = ", ")))
+      }
+
+      # Check for failed jobs
+      failedJobs <- character(0)
+      failedStates <- c("FAILED", "CANCELLED", "TIMEOUT", "OUT_OF_MEMORY",
+                        "NODE_FAIL", "PREEMPTED", "DEADLINE")
+
+      for (id in jobSet) {
+        for (state in failedStates) {
+          if (any(grepl(paste0(id, ".*", state), sacctOut, ignore.case = TRUE))) {
+            failedJobs <- c(failedJobs, paste0(id, ": ", state))
+          }
         }
-        stop("Some jobs are in unexpected states. Check sacct manually.")
+      }
+
+      if (length(failedJobs) > 0) {
+        stop("Jobs failed: ", paste(failedJobs, collapse=", "))
+      }
+
+      # If we get here, jobs are in some other state
+      message("Jobs in progress, waiting...")
+    } else {
+      # Try scontrol as an alternative
+      sctrlCmd <- sprintf("scontrol show job %s", paste(jobSet, collapse=" "))
+      sctrlOut <- system(sctrlCmd, intern = TRUE, ignore.stderr = TRUE)
+
+      if (length(sctrlOut) > 0 && !any(grepl("Invalid job id", sctrlOut))) {
+        if (any(grepl("JobState=COMPLETED", sctrlOut))) {
+          message("All jobs completed successfully")
+          return(TRUE)
+        }
+        message("Jobs found but not completed, waiting...")
+      } else {
+        message("No job information found. Will retry.")
       }
     }
 

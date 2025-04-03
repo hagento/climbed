@@ -297,7 +297,7 @@ getDegreeDays <- function(mappingFile = NULL,
                              noCC = noCC,
                              packagePath = packagePath)
 
-          allJobs <- c(allJobs, job)
+          allJobs[[job$jobId]] <- job
           message("Job ", job$jobId, " submitted successfully")
         },
         error = function(e) {
@@ -316,7 +316,7 @@ getDegreeDays <- function(mappingFile = NULL,
   message("Waiting for jobs to complete...")
 
   # extract all job IDs
-  jobIds <- lapply(allJobs, function(x) x$jobId)
+  jobIds <- as.numeric(names(allJobs))
 
   # wait for our specific jobs to complete (max. 6hrs)
   waitForSlurm(jobIds, maxWaitTime = 6 * 60 * 60)
