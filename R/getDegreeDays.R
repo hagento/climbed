@@ -121,6 +121,10 @@ getDegreeDays <- function(mappingFile = NULL,
   allJobs <- list()
 
 
+  # indicate whether SSP2 was added for historical fill-up
+  sspAddedForFillup <- FALSE
+
+
 
   # READ-IN DATA ---------------------------------------------------------------
 
@@ -233,6 +237,13 @@ getDegreeDays <- function(mappingFile = NULL,
         mutate(originalFile = FALSE) %>%
         rbind(fileMapping)
     }
+
+    # If we added fill-up files and SSP2 is not in the original list, add it now
+    if (nrow(fileMapping[fileMapping$originalFile == FALSE, ]) > 0 &&
+        !("SSP2" %in% ssp)) {
+      ssp <- c(ssp, "ssp2")
+      sspAddedForFillup <- TRUE
+    }
   }
 
 
@@ -254,9 +265,14 @@ getDegreeDays <- function(mappingFile = NULL,
     # read in population data
     pop <- importData(subtype = popMapping[[s]])
 
-    # filter compatible RCP scenarios
+    # filter compatible RCP scenarios and ensure that added SSPs are only used for fill-up
+    if (s == "ssp2" && isTRUE(sspAddedForFillup)) {
+      files <- fileMapping %>%
+        filter(.data$originalFile == FALSE)
+    } else {
     files <- fileMapping %>%
       filter(.data[["rcp"]] %in% scenMatrix[[s]])
+    }
 
     if (nrow(files) == 0) {
       stop("Provided SSP scenario not in file mapping.")
