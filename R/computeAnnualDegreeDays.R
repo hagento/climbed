@@ -42,7 +42,7 @@ initCalculation <- function(fileMapping,
                             tLim,
                             hddcddFactor,
                             wBAIT = NULL,
-                            globalPars = FALSE,
+                            globalPars = TRUE,
                             noCC = FALSE,
                             gridDataDir = NULL) {
 
@@ -80,7 +80,7 @@ initCalculation <- function(fileMapping,
   baitPars <- NULL
 
   if (isTRUE(bait)) {
-    if (isTRUE(globalPars)) {
+    if (isFALSE(globalPars)) {
       # gridded bait regression parameters
       baitPars <- computeBAITpars(model = unique(fileMapping$gcm))
       names(baitPars) <- c("aRSDS", "bRSDS", "aSFC", "bSFC", "aHUSS", "bHUSS") # TODO: change this

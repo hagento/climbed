@@ -80,7 +80,7 @@ getDegreeDays <- function(mappingFile = NULL,
                           ssp  = c("historical", "SSP2"),
                           outDir = "output",
                           fileRev = NULL,
-                          globalPars = FALSE,
+                          globalPars = TRUE,
                           endOfHistory = 2025,
                           noCC = FALSE,
                           packagePath = NULL) {
@@ -270,8 +270,8 @@ getDegreeDays <- function(mappingFile = NULL,
       files <- fileMapping %>%
         filter(.data$originalFile == FALSE)
     } else {
-    files <- fileMapping %>%
-      filter(.data[["rcp"]] %in% scenMatrix[[s]])
+      files <- fileMapping %>%
+        filter(.data[["rcp"]] %in% scenMatrix[[s]])
     }
 
     if (nrow(files) == 0) {
@@ -333,7 +333,8 @@ getDegreeDays <- function(mappingFile = NULL,
   if (isTRUE(noCC)) {
     # extract directory for grid data
     gridDataDir <- lapply(allJobs, function(x) x$gridDataDir) %>%
-      unique()
+      unique() %>%
+      .[[1]]
 
     dataNoCC <- computeConstantClimate(fileMapping = fileMapping,
                                        ssp = ssp,
