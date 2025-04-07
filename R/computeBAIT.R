@@ -138,7 +138,7 @@ smooth <- function(r, weight) {
 #' @returns \code{terra::SpatRaster} object with blended data.
 
 blend <- function(bait, tas, weight) {
-  bBar <- (tas - mean(unlist(wBAIT[c("bUpper", "bLower")]))) * 10 / (weight[["bUpper"]] - weight[["bLower"]])
+  bBar <- (tas - mean(unlist(weight[c("bUpper", "bLower")]))) * 10 / (weight[["bUpper"]] - weight[["bLower"]])
   b    <- weight[["bMax"]] / (1 + exp(-bBar))
 
   blend <- bait * (1 - b) + (tas * b)
