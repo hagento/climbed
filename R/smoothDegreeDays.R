@@ -40,6 +40,8 @@
 #' @param endOfHistory An integer specifying the upper temporal limit for historical data.
 #' Defaults to 2025.
 #'
+#' @param noCC \code{logical} indicating a no-climate-change scenario.
+#'
 #' @return A data frame with smoothed degree day values and a seamless transition period
 #' between historical and projected data.
 #'
@@ -63,8 +65,9 @@ smoothDegreeDays <- function(data,
                              fileMapping,
                              nSmoothIter = 50,
                              transitionYears = 10,
-                             nHistYears = 10,
-                             endOfHistory = 2025) {
+                             nHistYears = 20,
+                             endOfHistory = 2025,
+                             noCC = FALSE) {
 
   # PROCESS DATA ---------------------------------------------------------------
 
@@ -97,6 +100,21 @@ smoothDegreeDays <- function(data,
     ungroup()
 
 
+  # filter data w.r.t. periods
+  dataSmooth <- rbind(dataSmooth %>%
+                        filter(.data[["rcp"]] == "historical",
+                               .data[["period"]] <= endOfHistory),
+                      dataSmooth %>%
+                        filter(.data[["rcp"]] != "historical",
+                               .data[["period"]] > endOfHistory))
+
+
+  # no transition in noCC case
+  if (isTRUE(noCC)) {
+    return(dataSmooth)
+  }
+
+
   # fit linear regression to last n (= nHistYears) values per model and create
   # predictions for m (= transitionYears) periods
   transitionPreds <- data %>%
@@ -113,15 +131,6 @@ smoothDegreeDays <- function(data,
     group_by(across(-all_of(c("model", "prediction")))) %>%
     reframe(prediction = mean(.data[["prediction"]])) %>%
     ungroup()
-
-
-  # filter data w.r.t. periods
-  dataSmooth <- rbind(dataSmooth %>%
-                        filter(.data[["rcp"]] == "historical",
-                               .data[["period"]] <= endOfHistory),
-                      dataSmooth %>%
-                        filter(.data[["rcp"]] != "historical",
-                               .data[["period"]] > endOfHistory))
 
 
   # merge historical and scenario data
@@ -151,7 +160,7 @@ smoothDegreeDays <- function(data,
         .data[["value"]]
       )
     ) %>%
-  select(-"prediction")
+    select(-"prediction")
 
   return(dataSmooth)
 }
@@ -169,7 +178,7 @@ smoothDegreeDays <- function(data,
 predTransitionValues <- function(data, endOfHistory, transitionYears) {
   # Create prediction data frame
   predPeriods <- data.frame(
-    period = seq(endOfHistory, endOfHistory + transitionYears, 1)
+    period = seq(endOfHistory + 1, endOfHistory + transitionYears, 1)
   )
 
   # Linear fit

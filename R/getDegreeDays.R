@@ -351,7 +351,8 @@ getDegreeDays <- function(mappingFile = NULL,
                                  fileMapping,
                                  nSmoothIter = 100,
                                  transitionYears = 5,
-                                 endOfHistory = endOfHistory)
+                                 endOfHistory = endOfHistory,
+                                 noCC = noCC)
 
 
 
