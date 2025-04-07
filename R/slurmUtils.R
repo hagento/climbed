@@ -147,8 +147,8 @@ createSlurm <- function(fileRow,
       sfcwind = '%s',
       huss = '%s',
       stringsAsFactors = FALSE)",
-            fileRow$gcm, fileRow$rcp, fileRow$start, fileRow$end,
-            fileRow$tas, fileRow$rsds, fileRow$sfcwind, fileRow$huss
+      fileRow$gcm, fileRow$rcp, fileRow$start, fileRow$end,
+      fileRow$tas, fileRow$rsds, fileRow$sfcwind, fileRow$huss
     ),
     "",
     "result <- initCalculation(",
@@ -210,41 +210,33 @@ waitForSlurm <- function(jobIds, checkInterval = 60, maxWaitTime = 3600) {
   startTime <- Sys.time()
   jobIds <- as.character(jobIds)
   jobSet <- unique(jobIds)  # Remove duplicates
-
-  message("Monitoring jobs: ", paste(jobSet, collapse=", "))
-
+  message("Monitoring jobs: ", paste(jobSet, collapse = ", "))
   while (difftime(Sys.time(), startTime, units = "secs") < maxWaitTime) {
     # Try squeue first (for running/queued jobs)
-    squeueCmd <- sprintf("squeue -j %s -h -o '%%A|%%T'", paste(jobSet, collapse=","))
+    squeueCmd <- sprintf("squeue -j %s -h -o '%%A|%%T'", paste(jobSet, collapse = ","))
     squeueOut <- system(squeueCmd, intern = TRUE, ignore.stderr = TRUE)
-
     if (length(squeueOut) > 0) {
       message("Jobs still running in queue")
       Sys.sleep(checkInterval)
       next
     }
-
     # Check if job exists in accounting
-    sacctCmd <- sprintf("sacct -j %s -X -n -o jobid,state", paste(jobSet, collapse=","))
+    sacctCmd <- sprintf("sacct -j %s -X -n -o jobid,state", paste(jobSet, collapse = ","))
     sacctOut <- system(sacctCmd, intern = TRUE, ignore.stderr = TRUE)
-
     # If we got output from sacct
     if (length(sacctOut) > 0) {
       # Check for completed jobs
-      allCompleted <- all(sapply(jobSet, function(id) {
+      allCompleted <- all(vapply(jobSet, function(id) {
         any(grepl(paste0(id, ".*COMPLETED"), sacctOut, ignore.case = TRUE))
-      }))
-
+      }, logical(1)))
       if (allCompleted) {
         message("All jobs completed successfully")
         return(TRUE)
       }
-
       # Check for failed jobs
       failedJobs <- character(0)
       failedStates <- c("FAILED", "CANCELLED", "TIMEOUT", "OUT_OF_MEMORY",
                         "NODE_FAIL", "PREEMPTED", "DEADLINE")
-
       for (id in jobSet) {
         for (state in failedStates) {
           if (any(grepl(paste0(id, ".*", state), sacctOut, ignore.case = TRUE))) {
@@ -252,18 +244,15 @@ waitForSlurm <- function(jobIds, checkInterval = 60, maxWaitTime = 3600) {
           }
         }
       }
-
       if (length(failedJobs) > 0) {
-        stop("Jobs failed: ", paste(failedJobs, collapse=", "))
+        stop("Jobs failed: ", paste(failedJobs, collapse = ", "))
       }
-
       # If we get here, jobs are in some other state
       message("Jobs in progress, waiting...")
     } else {
       # Try scontrol as an alternative
-      sctrlCmd <- sprintf("scontrol show job %s", paste(jobSet, collapse=" "))
+      sctrlCmd <- sprintf("scontrol show job %s", paste(jobSet, collapse = " "))
       sctrlOut <- system(sctrlCmd, intern = TRUE, ignore.stderr = TRUE)
-
       if (length(sctrlOut) > 0 && !any(grepl("Invalid job id", sctrlOut))) {
         if (any(grepl("JobState=COMPLETED", sctrlOut))) {
           message("All jobs completed successfully")
@@ -274,10 +263,8 @@ waitForSlurm <- function(jobIds, checkInterval = 60, maxWaitTime = 3600) {
         message("No job information found. Will retry.")
       }
     }
-
     Sys.sleep(checkInterval)
   }
-
   if (difftime(Sys.time(), startTime, units = "secs") > maxWaitTime) {
     stop("Maximum wait time exceeded")
   }

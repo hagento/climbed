@@ -23,7 +23,8 @@
 #'
 #' @return A list containing standardized arguments:
 #'   \describe{
-#'     \item{\code{tLim}}{A named list with \code{"HDD"} and \code{"CDD"} components, each being numeric values or sequences.}
+#'     \item{\code{tLim}}{A named list with \code{"HDD"} and \code{"CDD"} components, each being
+#'     numeric values or sequences.}
 #'     \item{\code{std}}{A named numeric vector with names \code{"tLim"} and \code{"tAmb"}.}
 #'     \item{\code{ssp}}{A character vector of SSP scenarios.}
 #'   }

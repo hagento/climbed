@@ -64,7 +64,7 @@
 #'
 #' @author Hagen Tockhorn
 #'
-#' @importFrom dplyr filter pull
+#' @importFrom dplyr filter pull anti_join
 #' @importFrom magrittr %>%
 #' @importFrom utils read.csv
 #' @importFrom stats setNames
@@ -240,7 +240,7 @@ getDegreeDays <- function(mappingFile = NULL,
 
     # If we added fill-up files and SSP2 is not in the original list, add it now
     if (nrow(fileMapping[fileMapping$originalFile == FALSE, ]) > 0 &&
-        !("SSP2" %in% ssp)) {
+          !("SSP2" %in% ssp)) {
       ssp <- c(ssp, "ssp2")
       sspAddedForFillup <- TRUE
     }
@@ -334,7 +334,7 @@ getDegreeDays <- function(mappingFile = NULL,
     # extract directory for grid data
     gridDataDir <- lapply(allJobs, function(x) x$gridDataDir) %>%
       unique() %>%
-      .[[1]]
+      unlist()
 
     dataNoCC <- computeConstantClimate(fileMapping = fileMapping,
                                        ssp = ssp,

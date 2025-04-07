@@ -32,12 +32,12 @@
 #'
 #' @author Hagen Tockhorn
 #'
-#' @importFrom dplyr filter select mutate map2 unnest pull
+#' @importFrom dplyr filter select mutate pull
 #' @importFrom magrittr %>%
 #' @importFrom purrr map2
 #' @importFrom tidyr unnest
 #' @importFrom stringr str_extract
-#' @importFrom terra rast
+#' @importFrom terra rast app
 #'
 #' @export
 
@@ -101,7 +101,7 @@ computeConstantClimate <- function(fileMapping, ssp, popMapping, nHistYears, gri
 
         # Stack all rasters and calculate the mean
         dataMean <- do.call(c, allRasters) %>%
-          mean()
+          app(fun = mean, na.rm = TRUE)
 
         # aggregate using population weights
         aggData <- aggCells(dataMean, pop, countries, noCC = TRUE) %>%
@@ -146,7 +146,7 @@ computeConstantClimate <- function(fileMapping, ssp, popMapping, nHistYears, gri
 #'
 #' @author Hagen Tockhorn
 #'
-#' @importFrom terra rast nlyr c
+#' @importFrom terra rast nlyr
 #' @importFrom stringr str_extract str_split
 #' @importFrom magrittr %>%
 
