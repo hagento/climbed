@@ -199,10 +199,9 @@ getDegreeDays <- function(mappingFile = NULL,
 
   # if no file mapping is given for noCC-case, use default
   if (is.null(fileMapping) && isTRUE(noCC)) {
-    fileMapping <- read.csv2(getSystemFile("extdata", "mappings",
-                                           "ISIMIPbuildings_fileMapping_noCC.csv",
-                                           package = "climbed"),
-                             stringsAsFactors = FALSE)
+    fileMapping <- read.csv2(getSystemFile("extdata", "mappings", "ISIMIPbuildings_fileMapping.csv",
+                                           package = "climbed")) %>%
+      filter(.data$rcp == "historical")
   }
 
 
