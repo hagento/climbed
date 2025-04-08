@@ -5,61 +5,25 @@
 #' Historical data points remain unchanged, while all scenarios transition seamlessly
 #' from the same historical end value to their respective projected trajectories.
 #'
-#' @param data A data frame containing degree day projections with the following required columns:
-#'   \describe{
-#'     \item{\code{"period"}}{The time period (e.g., year).}
-#'     \item{\code{"value"}}{The degree day value.}
-#'     \item{\code{"model"}}{The climate model name.}
-#'     \item{\code{"rcp"}}{The Representative Carbon Pathway (RCP) scenario.}
-#'     \item{\code{"region"}}{The geographical region.}
-#'     \item{\code{"variable"}}{The degree day variable type (e.g., HDD, CDD).}
-#'     \item{\code{"ssp"}}{The Shared Socioeconomic Pathway (SSP) scenario.}
-#'     \item{\code{"tlim"}}{The temperature limit associated with the degree day calculation.}
-#'   }
-#'
-#' @param fileMapping A data frame containing metadata for locating and processing
-#' degree day output files. The following columns are required:
-#'   \describe{
-#'     \item{\code{"gcm"}}{The General Circulation Model (GCM) name.}
-#'     \item{\code{"rcp"}}{The RCP scenario (e.g., RCP2.6, RCP8.5).}
-#'     \item{\code{"start"}}{The starting year of the time period.}
-#'     \item{\code{"end"}}{The ending year of the time period.}
-#'     \item{\code{"originalFile"}}{Logical indicating subset of original mapping.}
-#'   }
-#'
+#' @param data A data frame containing degree day projections.
+#' @param fileMapping A data frame containing metadata for locating and processing degree day output files.
 #' @param nSmoothIter An integer specifying the number of iterations for lowpass smoothing.
-#' Defaults to \code{50}.
-#'
-#' @param transitionYears An integer specifying the number of years for the transition period
-#' from historical observations to projections. Defaults to \code{10}.
-#'
-#' @param nHistYears An integer specifying the number of years used for the linear regression
-#' to blend the continued historical trend into the scenario projections over a specified period
-#' in \code{transitionYears}.
-#'
+#' @param transitionYears An integer specifying the number of years for the transition period.
+#' @param nHistYears An integer specifying the number of years used for the linear regression.
 #' @param endOfHistory An integer specifying the upper temporal limit for historical data.
-#' Defaults to 2025.
-#'
-#' @param noCC \code{logical} indicating a no-climate-change scenario.
+#' @param noCC Logical indicating a no-climate-change scenario.
+#' @param predictTransition Logical indicating whether to predict transition values (TRUE)
+#'        or use mean-based transition (FALSE).
 #'
 #' @return A data frame with smoothed degree day values and a seamless transition period
 #' between historical and projected data.
 #'
-#' @details
-#' The function applies lowpass filtering to smooth model projections and uses a linear
-#' interpolation to create a consistent transition period. The transition ensures that
-#' all projections align with the historical data at the transition's start, diverging smoothly
-#' into their respective future trajectories.
+#' @author Hagen Tockhorn
 #'
-#' @importFrom dplyr ungroup group_by across all_of mutate reframe filter
-#' left_join select case_when group_modify
+#' @importFrom dplyr filter mutate select anti_join group_by across all_of ungroup reframe left_join group_modify
 #' @importFrom magclass lowpass
-#' @importFrom stats lm predict
 #' @importFrom purrr map2
 #' @importFrom tidyr unnest
-#'
-#' @author Hagen Tockhorn
-
 
 smoothDegreeDays <- function(data,
                              fileMapping,
@@ -67,7 +31,8 @@ smoothDegreeDays <- function(data,
                              transitionYears = 10,
                              nHistYears = 20,
                              endOfHistory = 2025,
-                             noCC = FALSE) {
+                             noCC = FALSE,
+                             predictTransition = FALSE) {
 
   # PROCESS DATA ---------------------------------------------------------------
 
@@ -114,47 +79,53 @@ smoothDegreeDays <- function(data,
     return(dataSmooth)
   }
 
+  # Get transition values based on chosen approach
+  if (predictTransition) {
+    # APPROACH 1: Prediction-based transition
+    transitionPreds <- data %>%
+      filter(.data[["period"]] >= (endOfHistory - nHistYears),
+             .data[["period"]] <= endOfHistory,
+             .data[["rcp"]] == "historical",
+             !is.na(.data[["value"]])) %>%
 
-  # fit linear regression to last n (= nHistYears) values per model and create
-  # predictions for m (= transitionYears) periods
-  transitionPreds <- data %>%
-    filter(.data[["period"]] >= (endOfHistory - nHistYears),
-           .data[["period"]] <= endOfHistory,
-           .data[["rcp"]] == "historical",
-           !is.na(.data[["value"]])) %>%
+      group_by(across(all_of(c("region", "variable", "tlim", "model")))) %>%
 
-    group_by(across(all_of(c("region", "variable", "tlim", "model")))) %>%
-    group_modify(~predTransitionValues(.x, endOfHistory, transitionYears)) %>%
-    ungroup() %>%
+      # smooth historical data to better obtain trends
+      mutate(value = lowpass(.data[["value"]], i = nSmoothIter)) %>%
 
-    # average predictions across models
-    group_by(across(-all_of(c("model", "prediction")))) %>%
-    reframe(prediction = mean(.data[["prediction"]])) %>%
-    ungroup()
+      # predict continuation of historical trends
+      group_modify(~predTransitionValues(.x, endOfHistory, transitionYears)) %>%
+      ungroup() %>%
 
+      # average predictions across models
+      group_by(across(-all_of(c("model", "prediction")))) %>%
+      reframe(prediction = mean(.data[["prediction"]])) %>%
+      ungroup()
+  } else {
+    # APPROACH 2: Mean-based transition
+    transitionPreds <- dataSmooth %>%
+      filter(.data$rcp != "historical",
+             .data$period > endOfHistory,
+             .data$period <= (endOfHistory + transitionYears)) %>%
+      group_by(across(all_of(c("region", "variable", "tlim", "period")))) %>%
+      reframe(prediction = mean(.data$value, na.rm = TRUE))
+  }
 
-  # merge historical and scenario data
+  # Apply transition using consistent approach for both methods
   dataSmooth <- dataSmooth %>%
-    left_join(transitionPreds,
-              by = c("region", "variable", "period", "tlim")) %>%
+    left_join(transitionPreds, by = c("region", "variable", "tlim", "period")) %>%
     mutate(
       value = ifelse(
-        # Condition: In transition period with both prediction and value available
-        .data[["period"]] >= endOfHistory &
+        # Condition: In transition period with prediction available
+        .data[["period"]] > endOfHistory &
           .data[["period"]] <= (endOfHistory + transitionYears) &
+          .data[["rcp"]] != "historical" &
           !is.na(.data[["prediction"]]) &
           !is.na(.data[["value"]]),
 
-        # apply weighted transition
-        {
-          # calculate normalized position in transition (0 to 1)
-          t <- (.data[["period"]] - endOfHistory) / transitionYears
-
-          # use cosine-based weighting for smoother S-curve transition
-          weight <- 0.5 * (1 - cos(t * pi))
-
-          .data[["prediction"]] + (.data[["value"]] - .data[["prediction"]]) * weight
-        },
+        # Apply linear weighted transition
+        .data[["prediction"]] + (.data[["value"]] - .data[["prediction"]]) *
+          ((.data[["period"]] - endOfHistory) / transitionYears),
 
         # else: keep original value
         .data[["value"]]
@@ -174,6 +145,8 @@ smoothDegreeDays <- function(data,
 #' @param endOfHistory upper temporal limit for historical data
 #' @param transitionYears An integer specifying the number of years for the transition period
 #' from historical observations to projections.
+#'
+#' @importFrom stats lm predict
 
 predTransitionValues <- function(data, endOfHistory, transitionYears) {
   # Create prediction data frame

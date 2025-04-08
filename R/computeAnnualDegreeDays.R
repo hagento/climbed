@@ -309,7 +309,7 @@ compCellHDDCDD <- function(temp, typeDD, tlim, factors) {
 
 aggCells <- function(data, weight, mask, noCC = FALSE) {
   # Determine which years to process
-  if (noCC) {
+  if (isTRUE(noCC)) {
     # For constant climate, use all years from weight
     yearsToProcess <- names(weight)
   } else {

@@ -349,9 +349,10 @@ getDegreeDays <- function(mappingFile = NULL,
   dataSmooth <- smoothDegreeDays(data,
                                  fileMapping,
                                  nSmoothIter = 100,
-                                 transitionYears = 5,
+                                 transitionYears = 10,
                                  endOfHistory = endOfHistory,
-                                 noCC = noCC)
+                                 noCC = noCC,
+                                 predictTransition = FALSE)
 
 
 

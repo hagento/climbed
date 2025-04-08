@@ -11,6 +11,4 @@
 ^\.github$
 ^.*CITATION.cff$
 ^inst/intdata/
-^examplePlot.pdf$
-^hddcdd.csv$
 ^output$
