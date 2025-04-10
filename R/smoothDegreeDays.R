@@ -15,7 +15,7 @@
 #' @param predictTransition Logical indicating whether to predict transition values (TRUE)
 #'        or use mean-based transition (FALSE).
 #'
-#' @return A data frame with smoothed degree day values and a seamless transition period
+#' @returns A data frame with smoothed degree day values and a seamless transition period
 #' between historical and projected data.
 #'
 #' @author Hagen Tockhorn

@@ -210,32 +210,24 @@ getDegreeDays <- function(mappingFile = NULL,
     mutate(originalFile = TRUE)
 
   # if necessary, add files to fill up missing historical data points
-  if (max(fileMapping$end[fileMapping$rcp == "historical"]) < endOfHistory) {
-    # check if there are RCP 2.6 files that cover the required period
-    # AND check if data from all possible models (five) exists
-    requiredCoverage <- any(
-      fileMapping$rcp == "2.6" &
-        fileMapping$start <= max(fileMapping$end[fileMapping$rcp == "historical"]) + 1 &
-        fileMapping$end >= endOfHistory
-    ) && length(unique(fileMapping$gcm[fileMapping$rcp == "2.6"])) == 5
+  if (max(fileMapping$end[fileMapping$rcp == "historical"]) < endOfHistory &&
+        !(any(fileMapping$rcp == "2.6" &
+                fileMapping$start <= max(fileMapping$end[fileMapping$rcp == "historical"]) + 1 &
+                fileMapping$end >= endOfHistory) &&
+            length(unique(fileMapping$gcm[fileMapping$rcp == "2.6"])) == 5)) {
 
-    if (!requiredCoverage) {
-      fullMappingFile <- getSystemFile("extdata", "mappings", "ISIMIPbuildings_fileMapping.csv",
-                                       package = "climbed")
-
-      fileMapping <- fullMappingFile %>%
-        read.csv2() %>%
-
-        # ensure the files cover the period from the end of historical data to endOfHistory
-        filter(.data$rcp == "2.6",
-               (.data$start <= max(fileMapping$end[fileMapping$rcp == "historical"]) + 1 &
-                  .data$end >= endOfHistory)) %>%
-
-        # filter out duplicated entries
-        anti_join(fileMapping, by = c("gcm", "rcp", "start", "end")) %>%
-        mutate(originalFile = FALSE) %>%
-        rbind(fileMapping)
-    }
+    fullMappingFile <- getSystemFile("extdata", "mappings", "ISIMIPbuildings_fileMapping.csv",
+                                     package = "climbed")
+    fileMapping <- fullMappingFile %>%
+      read.csv2() %>%
+      # ensure the files cover the period from the end of historical data to endOfHistory
+      filter(.data$rcp == "2.6",
+             (.data$start <= max(fileMapping$end[fileMapping$rcp == "historical"]) + 1 &
+                .data$end >= endOfHistory)) %>%
+      # filter out duplicated entries
+      anti_join(fileMapping, by = c("gcm", "rcp", "start", "end")) %>%
+      mutate(originalFile = FALSE) %>%
+      rbind(fileMapping)
 
     # If we added fill-up files and SSP2 is not in the original list, add it now
     if (nrow(fileMapping[fileMapping$originalFile == FALSE, ]) > 0 &&
@@ -267,7 +259,7 @@ getDegreeDays <- function(mappingFile = NULL,
     # filter compatible RCP scenarios and ensure that added SSPs are only used for fill-up
     if (s == "ssp2" && isTRUE(sspAddedForFillup)) {
       files <- fileMapping %>%
-        filter(.data$originalFile == FALSE)
+        filter(!.data$originalFile)
     } else {
       files <- fileMapping %>%
         filter(.data[["rcp"]] %in% scenMatrix[[s]])

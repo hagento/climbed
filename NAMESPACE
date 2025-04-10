@@ -3,6 +3,7 @@
 export(computeConstantClimate)
 export(getDegreeDays)
 export(processArgs)
+importFrom(dplyr,"%>%")
 importFrom(dplyr,.data)
 importFrom(dplyr,across)
 importFrom(dplyr,all_of)

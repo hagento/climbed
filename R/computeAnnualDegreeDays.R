@@ -204,30 +204,36 @@ compStackHDDCDD <- function(fileNames, tlim, countries, pop, factors, bait,
   temp <- terra::round(temp, digits = 1)
   names(temp) <- dates
 
-  # Create an empty list to store all layers for the current year if noCC == TRUE
+  # create an empty list to store all layers for the current year if noCC == TRUE
   yearlyRasterLayers <- list()
 
-  # loop: type of degree day
-  hddcdd <- do.call(rbind, lapply(c("HDD", "CDD"), function(typeDD) {
-    # loop: threshold temperatures
-    do.call(rbind, lapply(tlim[[typeDD]], function(t) {
-      # Compute annual degree days
+  # initialize empty data frame for hddcdd
+  hddcdd <- data.frame()
+
+  # first loop: type of degree day
+  for (typeDD in c("HDD", "CDD")) {
+    # second loop: threshold temperatures
+    for (t in tlim[[typeDD]]) {
+      # compute annual degree days
       annualDegreeDays <- compCellHDDCDD(temp, typeDD, t, factors)
 
       if (isTRUE(noCC)) {
         # create and set appropriate layer name
         layerName <- paste0(typeDD, "_", t)
-        yearlyRasterLayers[[layerName]] <<- annualDegreeDays
+        yearlyRasterLayers[[layerName]] <- annualDegreeDays
         names(yearlyRasterLayers[[layerName]]) <- layerName
       }
 
-      # Continue with your aggregation as before, using original annualDegreeDays
-      annualDegreeDays %>%
+      # aggregate and prepare data frame
+      annualDegreeDaysAgg <- annualDegreeDays %>%
         aggCells(pop, countries) %>%
         mutate("variable" = typeDD,
                "tlim"     = t)    # [C]
-    }))
-  }))
+
+      # Append to the main data frame
+      hddcdd <- rbind(hddcdd, annualDegreeDaysAgg)
+    }
+  }
 
 
   # Save the combined layers

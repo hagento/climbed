@@ -26,7 +26,7 @@
 #' @param gridDataDir A string specifying the path to the directory containing grid data files
 #' in .tif format. The directory must exist and contain the required degree day data files.
 #'
-#' @return A data frame containing population-weighted aggregated degree day data for
+#' @returns A data frame containing population-weighted aggregated degree day data for
 #' constant climate scenarios, with columns for period, model, variable, temperature limit,
 #' SSP scenario, and RCP scenario (set to "noCC" for no climate change).
 #'
@@ -136,7 +136,7 @@ computeConstantClimate <- function(fileMapping, ssp, popMapping, nHistYears, gri
 #' should follow the pattern "variable_number", where variable typically represents HDD or CDD
 #' and number represents the temperature threshold.
 #'
-#' @return A nested list organized by variable, temperature limit, and model, containing
+#' @returns A nested list organized by variable, temperature limit, and model, containing
 #' SpatRaster objects with layers representing different years. The structure is:
 #'   \describe{
 #'     \item{\code{variable}}{The degree day variable (e.g., "HDD", "CDD")}

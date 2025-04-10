@@ -2,6 +2,10 @@
 #'
 #' @param data data frame with necessary historical and scenario climate data
 #' @param endOfHistory upper temporal limit for historical data
+#'
+#' @importFrom dplyr filter mutate anti_join %>%
+#'
+#' @return A data frame with filled historical climate data
 
 fillHistory <- function(data, endOfHistory) {
 
