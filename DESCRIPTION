@@ -8,6 +8,7 @@ Maintainer: Hagen Tockhorn <hagento@pik-potsdam.de>
 Description: Prepare climate data to be used by building energy demand models.
 License: MIT + file LICENSE
 Imports:
+    digest,
     dplyr,
     ncdf4,
     pracma,
@@ -22,4 +23,4 @@ Imports:
     tidyr
 Encoding: UTF-8
 RoxygenNote: 7.3.2
-Date: 2025-04-10
+Date: 2025-04-22

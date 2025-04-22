@@ -32,6 +32,8 @@
 #' @importFrom piamutils getSystemFile
 #' @importFrom terra writeCDF
 #' @importFrom utils modifyList
+#' @importFrom digest digest
+#' @importFrom stats runif
 
 createSlurm <- function(fileRow,
                         pop,
@@ -47,13 +49,18 @@ createSlurm <- function(fileRow,
                         packagePath = NULL) {
   # PARAMETERS -----------------------------------------------------------------
 
+  # determine required memory
+  mem <- ifelse(isTRUE(bait),
+                ifelse(isTRUE(globalPars), "64G", "128G"),
+                "32G")
+
   # define default slurm job configuration
   defaultConfig <- list(
     logsDir      = file.path(outDir, "logs"),
     jobNamePrefix = "hddcdd",
-    cpusPerTask   = 32,
     nodes         = 1,
     ntasks        = 1,
+    mem           = mem,
     partition     = "standard",
     qos           = "short"
   )
@@ -78,8 +85,12 @@ createSlurm <- function(fileRow,
     dir.create(gridDataDir, recursive = TRUE, showWarnings = FALSE)
   }
 
-  # create a unique tag for this batch of files
-  batchTag <- format(Sys.time(), "%Y%m%d_%H%M%S")
+  # Create a unique tag with timestamp + hash
+  batchTag <- paste0(
+    format(Sys.time(), "%Y%m%d_%H%M%S"),
+    "_",
+    substr(digest(runif(1)), 1, 6)  # 6-character hash
+  )
 
   # save files temporarily with a time tag to remove after successful processing
   pop_names <- names(pop)
@@ -116,8 +127,8 @@ createSlurm <- function(fileRow,
     sprintf("#SBATCH --job-name=%s", jobName),
     sprintf("#SBATCH --output=%s/log-%%j.out", config$logsDir),
     sprintf("#SBATCH --error=%s/errlog-%%j.out", config$logsDir),
-    sprintf("#SBATCH --cpus-per-task=%s", config$cpusPerTask),
     sprintf("#SBATCH --nodes=%s", config$nodes),
+    sprintf("#SBATCH --mem=%s", config$mem),
     sprintf("#SBATCH --ntasks=%s", config$ntasks),
     sprintf("#SBATCH --partition=%s", config$partition),
     sprintf("#SBATCH --qos=%s", config$qos),

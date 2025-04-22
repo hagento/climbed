@@ -85,11 +85,30 @@ prepBaitInput <- function(fileNames,
 #' @importFrom utils read.csv2
 
 cfac <- function(t, type, params) {
+  # Load default parameters
+  defaultParams <- read.csv2(getSystemFile("extdata", "mappings", "cfacBAITpars.csv",
+                                           package = "climbed"))
+  defaultPars <- setNames(lapply(defaultParams$value, function(x) eval(parse(text = x))),
+                          defaultParams$variable)
+
+  # Return calculation based on type
   return(switch(type,
-                s = params[["aRSDS"]] + params[["bRSDS"]] * t,
-                w = params[["aSFC"]] + params[["bSFC"]] * t,
-                h = exp(params[["aHUSS"]] + params[["bHUSS"]] * t),
-                t = params[["T"]],
+                s = if ("aRSDS" %in% names(params) && "bRSDS" %in% names(params)) {
+                  params[["aRSDS"]] + params[["bRSDS"]] * t
+                } else {
+                  defaultPars[["aRSDS"]] + defaultPars[["bRSDS"]] * t
+                },
+                w = if ("aSFC" %in% names(params) && "bSFC" %in% names(params)) {
+                  params[["aSFC"]] + params[["bSFC"]] * t
+                } else {
+                  defaultPars[["aSFC"]] + defaultPars[["bSFC"]] * t
+                },
+                h = if ("aHUSS" %in% names(params) && "bHUSS" %in% names(params)) {
+                  exp(params[["aHUSS"]] + params[["bHUSS"]] * t)
+                } else {
+                  exp(defaultPars[["aHUSS"]] + defaultPars[["bHUSS"]] * t)
+                },
+                t = if ("T" %in% names(params)) params[["T"]] else defaultPars[["T"]],
                 warning("No valid parameter type specified.")))
 }
 
