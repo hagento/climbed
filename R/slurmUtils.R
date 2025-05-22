@@ -64,10 +64,9 @@ createSlurm <- function(fileRow,
     ntasks        = 1,
     mem           = mem,
     partition     = "standard",
-    qos           = "short"
+    qos           = "short",
+    SLURMtmpDir   = "slurm_tmp"  # Default temporary directory for slurm jobs
   )
-
-
 
   # PROCESS DATA ---------------------------------------------------------------
 
@@ -80,6 +79,9 @@ createSlurm <- function(fileRow,
   dir.create(config$logsDir, recursive = TRUE, showWarnings = FALSE)
   dir.create(file.path(outDir, "hddcdd"), recursive = TRUE, showWarnings = FALSE)
 
+  # Create custom temporary directory for SLURM
+  dir.create(file.path(tmpDir, config$SLURMtmpDir), recursive = TRUE, showWarnings = FALSE)
+
   # create output directory for grid data in noCC-case
   gridDataDir <- NULL
   if (isTRUE(noCC)) {
@@ -91,7 +93,7 @@ createSlurm <- function(fileRow,
   batchTag <- paste0(
     format(Sys.time(), "%Y%m%d_%H%M%S"),
     "_",
-    substr(digest(runif(1)), 1, 6)  # 6-character hash
+    substr(digest::digest(runif(1)), 1, 6)  # 6-character hash
   )
 
   # save files temporarily with a time tag to remove after successful processing
@@ -108,8 +110,13 @@ createSlurm <- function(fileRow,
   jobName <- paste0(config$jobNamePrefix, "_", fileRow$gcm, "_", fileRow$rcp,
                     "_", fileRow$start, "-", fileRow$end)
 
-  # write slurm job script
-  jobScript <- tempfile(pattern = "initcalc_job_", fileext = ".slurm")
+  # Create job script directory
+  scriptDir <- file.path(config$tmpDir, "job_scripts")
+  dir.create(scriptDir, recursive = TRUE, showWarnings = FALSE)
+
+  # Create separate R script file (SOLUTION 1)
+  rScriptPath <- file.path(scriptDir, paste0("r_script_", batchTag, ".R"))
+  jobScript <- file.path(scriptDir, paste0("job_", batchTag, ".slurm"))
 
   # determine package loading approach
   if (!is.null(packagePath)) {
@@ -120,20 +127,8 @@ createSlurm <- function(fileRow,
     packageLoadingCode <- "library(climbed)"
   }
 
+  # Write the R script file instead of embedding it in the SLURM script
   writeLines(c(
-    "#!/bin/bash",
-    sprintf("#SBATCH --job-name=%s", jobName),
-    sprintf("#SBATCH --output=%s/log-%%j.out", config$logsDir),
-    sprintf("#SBATCH --error=%s/errlog-%%j.out", config$logsDir),
-    sprintf("#SBATCH --nodes=%s", config$nodes),
-    sprintf("#SBATCH --mem=%s", config$mem),
-    sprintf("#SBATCH --ntasks=%s", config$ntasks),
-    sprintf("#SBATCH --partition=%s", config$partition),
-    sprintf("#SBATCH --qos=%s", config$qos),
-    "",
-    "source /p/system/modulefiles/defaults/piam/module_load_piam",
-    "",
-    "R --no-save <<EOF",
     "library(devtools)",
     packageLoadingCode,
     "",
@@ -174,20 +169,36 @@ createSlurm <- function(fileRow,
     sprintf("write.csv(result, '%s', row.names = FALSE)", outputFile),
     "",
     "# Clean up all temporary files",
-    sprintf("unlink(list.files('%s', pattern='%s', full.names=TRUE))", tmpDir, batchTag),
-    "EOF"
-  ), jobScript)
+    sprintf("unlink(list.files('%s', pattern='%s', full.names=TRUE))", tmpDir, batchTag)
+  ), rScriptPath)
 
+  # Write the SLURM job script without using here-document
+  writeLines(c(
+    "#!/bin/bash",
+    sprintf("#SBATCH --job-name=%s", jobName),
+    sprintf("#SBATCH --output=%s/log-%%j.out", config$logsDir),
+    sprintf("#SBATCH --error=%s/errlog-%%j.out", config$logsDir),
+    sprintf("#SBATCH --nodes=%s", config$nodes),
+    sprintf("#SBATCH --mem=%s", config$mem),
+    sprintf("#SBATCH --ntasks=%s", config$ntasks),
+    sprintf("#SBATCH --partition=%s", config$partition),
+    sprintf("#SBATCH --qos=%s", config$qos),
+    "",
+    "source /p/system/modulefiles/defaults/piam/module_load_piam",
+    "",
+    # Execute the R script with Rscript instead of using here-document
+    sprintf("Rscript %s", rScriptPath)
+  ), jobScript)
 
   # submit slurm job
   slurmCommand <- sprintf("sbatch %s", jobScript)
   submissionResult <- system(slurmCommand, intern = TRUE)
   jobId <- str_extract(submissionResult, "\\d+")
 
-
   # return relevant job information
   return(invisible(list(jobName = jobName,
                         jobScript = jobScript,
+                        rScriptPath = rScriptPath,  # Added this to return path to R script
                         outputFile = outputFile,
                         slurmCommand = slurmCommand,
                         jobId = jobId,
@@ -223,7 +234,6 @@ waitForSlurm <- function(jobIds, checkInterval = 60, maxWaitTime = 3600) {
     squeueCmd <- sprintf("squeue -j %s -h -o '%%A|%%T'", paste(jobSet, collapse = ","))
     squeueOut <- system(squeueCmd, intern = TRUE, ignore.stderr = TRUE)
     if (length(squeueOut) > 0) {
-      message("Jobs still running in queue")
       Sys.sleep(checkInterval)
       next
     }

@@ -312,7 +312,7 @@ getDegreeDays <- function(mappingFile = NULL,
   jobIds <- as.numeric(names(allJobs))
 
   # wait for our specific jobs to complete (max. 6hrs)
-  waitForSlurm(jobIds, maxWaitTime = 6 * 60 * 60)
+  waitForSlurm(jobIds, maxWaitTime = 12 * 60 * 60)
 
 
 
