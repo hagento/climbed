@@ -253,9 +253,6 @@ getDegreeDays <- function(mappingFile = NULL,
   for (s in ssp) {
     message("\nProcessing SSP scenario: ", s)
 
-    # read in population data
-    pop <- importData(subtype = popMapping[[s]])
-
     # filter compatible RCP scenarios and ensure that added SSPs are only used for fill-up
     if (s == "ssp2" && isTRUE(sspAddedForFillup)) {
       files <- fileMapping %>%
@@ -277,7 +274,7 @@ getDegreeDays <- function(mappingFile = NULL,
       tryCatch(
         {
           job <- createSlurm(fileRow = files[i, ],
-                             pop = pop,
+                             pop = popMapping[[s]],
                              ssp = s,
                              bait = bait,
                              tLim = tLim,

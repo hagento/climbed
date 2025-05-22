@@ -14,7 +14,7 @@
 #'     \item{rcp}{RCP scenario identifier.}
 #'     \item{gcm}{GCM model identifier.}
 #'   }
-#' @param pop \code{SpatRaster} with annual population data.
+#' @param pop \code{character} filename of annual population data.
 #' @param ssp \code{character} SSP scenario.
 #' @param bait \code{logical} indicating whether to use raw temperature or BAIT as ambient temperature.
 #' @param tLim \code{numeric} Temperature limits for degree day calculations.
@@ -75,6 +75,9 @@ initCalculation <- function(fileMapping,
 
   # read country masks
   countries <- importData(subtype = "countrymasks-fractional_30arcmin.nc")
+
+  # read in population data
+  pop <- importData(pop)
 
 
   baitPars <- NULL

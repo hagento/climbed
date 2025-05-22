@@ -93,10 +93,6 @@ createSlurm <- function(fileRow,
   )
 
   # save files temporarily with a time tag to remove after successful processing
-  pop_names <- names(pop)
-  saveRDS(pop_names, sprintf("%s/pop_names_%s.rds", tmpDir, batchTag))
-  writeCDF(pop, sprintf("%s/pop_%s.nc", tmpDir, batchTag), overwrite = TRUE)
-
   saveRDS(tLim, sprintf("%s/tLim_%s.rds", tmpDir, batchTag))
   saveRDS(hddcddFactor, sprintf("%s/hddcddFactor_%s.rds", tmpDir, batchTag))
   saveRDS(wBAIT, sprintf("%s/wBAIT_%s.rds", tmpDir, batchTag))
@@ -137,12 +133,7 @@ createSlurm <- function(fileRow,
     "",
     "R --no-save <<EOF",
     "library(devtools)",
-    packageLoadingCode,   # use dynamic loading approach
-    "",
-    "# Load and restore raster with names",
-    sprintf("pop <- terra::rast('%s/pop_%s.nc')", tmpDir, batchTag),
-    sprintf("pop_names <- readRDS('%s/pop_names_%s.rds')", tmpDir, batchTag),
-    "names(pop) <- pop_names",
+    packageLoadingCode,
     "",
     sprintf("tLim <- readRDS('%s/tLim_%s.rds')", tmpDir, batchTag),
     sprintf("hddcddFactor <- readRDS('%s/hddcddFactor_%s.rds')", tmpDir, batchTag),
@@ -165,14 +156,17 @@ createSlurm <- function(fileRow,
     "result <- initCalculation(",
     "  fileMapping = fileMapping,",
     sprintf("  ssp = '%s',", ssp),
-    sprintf("  bait = '%s',", bait),
+    sprintf("  bait = %s,", bait),
     "  tLim = tLim,",
-    "  pop = pop,",
+    sprintf("  pop = '%s',", pop),
     "  hddcddFactor = hddcddFactor,",
     "  wBAIT = wBAIT,",
-    sprintf("  globalPars = '%s',", globalPars),
-    sprintf("  noCC = '%s',", noCC),
-    sprintf("  gridDataDir = '%s'", gridDataDir),
+    sprintf("  globalPars = %s,", globalPars),
+    sprintf("  noCC = %s,", noCC),
+    ifelse(is.null(gridDataDir),
+           "  gridDataDir = NULL",
+           sprintf("  gridDataDir = '%s'", gridDataDir))
+    ,
     ")",
     "",
     sprintf("write.csv(result, '%s', row.names = FALSE)", outputFile),
