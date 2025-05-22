@@ -1,16 +1,15 @@
-#' Calculate Regression Parameters for BAIT Climate Variables
+#' Calculate Global Regression Parameters for BAIT Climate Variables
 #'
 #' @description Performs linear regression on historical climate data to calculate
-#' regression parameters for key climate variables: surface downwelling shortwave
+#' global regression parameters for key climate variables: surface downwelling shortwave
 #' radiation (rsds), near-surface wind speed (sfcwind), and near-surface specific
 #' humidity (huss), with respect to near-surface air temperature (tas).
 #'
 #' The regression utilizes a simple linear model based on historical data from
-#' 2000 to 2019-21 depending on the model. For rsds and sfcwind, a linear relationship
+#' 2000 to 2019-21 across all available models. For rsds and sfcwind, a linear relationship
 #' is assumed, while for huss, an exponential relationship is adopted, reflecting
 #' the non-linear dependence of water vapor pressure on temperature.
 #'
-#' @param model \code{character} string specifying the GCM responsible for data input.
 #' @param cacheDir \code{character} string specifying the directory containing pre-calculated
 #'   function outputs.
 #'
@@ -24,64 +23,79 @@
 #' @importFrom utils read.csv2
 #' @importFrom piamutils getSystemFile
 
-computeBAITpars <- function(model = "20crv3-era5",
-                            cacheDir = "intdata/BAITpars") {
+computeBAITpars <- function(cacheDir = "intdata/BAITpars") {
   # CHECK CACHE-----------------------------------------------------------------
-
   # absolut package path
   pkgPath <- getSystemFile(package = "climbed")
-
   if (!is.null(cacheDir)) {
-    fpath <- list.files(file.path(pkgPath, cacheDir), pattern = model, full.names = TRUE) %>%
+    fpath <- list.files(file.path(pkgPath, cacheDir), pattern = "globalBaitPars", full.names = TRUE) %>%
       unlist()
-
-    if (file.exists(fpath)) {
-      print(paste0("Load parameters from cache: ", basename(fpath)))
+    if (length(fpath) > 0 && file.exists(fpath)) {
+      print(paste0("Load global parameters from cache: ", basename(fpath)))
       regPars <- rast(fpath)
-
       return(regPars)
     } else {
-      print("BAITpars file not in given cache directory - will be re-calculated.")
+      print("Global BAITpars file not in given cache directory - will be re-calculated.")
     }
   }
 
-
   # READ-IN DATA----------------------------------------------------------------
+  # Read file mapping
+  fileMapping <- read.csv2(getSystemFile("extdata", "mappings", "BAITpars_fileMapping.csv", package = "climbed"))
 
-  files <- read.csv2(getSystemFile("extdata", "mappings", "BAITpars_fileMapping.csv", package = "climbed")) %>%
-    filter(.data[["gcm"]] == model)
+  vars <- list("tas" = "tas", "rsds" = "RSDS", "sfcwind" = "SFC", "huss" = "HUSS")
 
-  vars <- c("tas", "sfcwind", "rsds", "huss")
+  # Create empty list to store data
+  allData <- setNames(vector("list", length(names(vars))), names(vars))
 
-  data <- setNames(lapply(vars, function(v) {
-    dataVar <- rast(vapply(files[[v]], function(f) importData(subtype = f),
-                           FUN.VALUE = list(), USE.NAMES = FALSE))
-    return(dataVar)
-  }),
-  vars)
+  # Load all data at once instead of model by model
+  for (v in names(vars)) {
+    # Get all non-NA file paths for this variable across all models
+    varFiles <- fileMapping[[v]]
+    varFiles <- varFiles[!is.na(varFiles)]
 
+    if (length(varFiles) > 0) {
+      # Import data for each file
+      dataList <- list()
+      for (f in varFiles) {
+        tryCatch({
+          importedData <- importData(subtype = f)
+          dataList <- c(dataList, list(importedData))
+        }, error = function(e) {
+          warning(paste("Error importing file:", f, "-", e$message))
+        })
+      }
 
+      # Only create raster if we have data
+      if (length(dataList) > 0) {
+        allData[[v]] <- rast(dataList)
+      }
+    }
+  }
 
   # PROCESS DATA----------------------------------------------------------------
-
   # convert huss into log scale
-  data$huss <- log(data$huss)
-
+  allData$huss <- log(allData$huss)
   # convert tas into [C]
-  data$tas <- data$tas - 273.15
+  allData$tas <- allData$tas - 273.15
 
-  regPars <- do.call(rast, lapply(vars[vars != "tas"], function(v) {
-    x <- data[["tas"]]
-    y <- data[[v]]
-
+  regPars <- do.call(c, lapply(names(vars)[names(vars) != "tas"], function(v) {
+    print(v)
+    x <- allData[["tas"]]
+    y <- allData[[v]]
     r <- regress(x = x, y = y, formula = y ~ x)
-
-    names(r) <- c(paste0("a_", v), paste0("b_", v))
+    names(r) <- c(paste0("a", vars[v]), paste0("b", vars[v]))
     return(r)
   }))
 
+  # Save to cache
+  if (!is.null(cacheDir)) {
+    dir.create(file.path(pkgPath, cacheDir), showWarnings = FALSE, recursive = TRUE)
+    outputPath <- file.path(pkgPath, cacheDir, "globalBaitPars.tif")
+    writeRaster(regPars, outputPath, overwrite = TRUE)
+    print(paste0("Saved global parameters to cache: ", basename(outputPath)))
+  }
 
   # OUTPUT----------------------------------------------------------------------
-
   return(regPars)
 }

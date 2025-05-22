@@ -82,8 +82,7 @@ initCalculation <- function(fileMapping,
   if (isTRUE(bait)) {
     if (isFALSE(globalPars)) {
       # gridded bait regression parameters
-      baitPars <- computeBAITpars(model = unique(fileMapping$gcm))
-      names(baitPars) <- c("aRSDS", "bRSDS", "aSFC", "bSFC", "aHUSS", "bHUSS") # TODO: change this
+      baitPars <- computeBAITpars()
     } else {
       # load default global parameters
       paramsMap <- read.csv2(getSystemFile("extdata", "mappings", "cfacBAITpars.csv",
