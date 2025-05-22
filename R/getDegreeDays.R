@@ -89,13 +89,18 @@ getDegreeDays <- function(mappingFile = NULL,
 
   # check for mapping file
   if (is.null(mappingFile)) {
-    stop("No mapping file was provided.")
+    if (isTRUE(noCC)) {
+      mappingFile <- getSystemFile("extdata", "mappings", "ISIMIPbuildings_fileMapping.csv",
+                                   package = "climbed")
+    } else {
+      stop("No mapping file was provided.")
+    }
+  } else {
+    # absolute path
+    mappingFile <- getSystemFile("extdata", "mappings", mappingFile, package = "climbed")
   }
 
-  # absolute path
-  mappingFile <- getSystemFile("extdata", "mappings", mappingFile, package = "climbed")
-
-  if (!file.exists(mappingFile)) {
+  if (!file.exists(mappingFile) && isFALSE(noCC)) {
     stop("Provided mapping file does not exist in /extdata/mappings.")
   }
 
@@ -201,10 +206,9 @@ getDegreeDays <- function(mappingFile = NULL,
     lapply(trimws)
 
 
-  # if no file mapping is given for noCC-case, use default
-  if (is.null(fileMapping) && isTRUE(noCC)) {
-    fileMapping <- read.csv2(getSystemFile("extdata", "mappings", "ISIMIPbuildings_fileMapping.csv",
-                                           package = "climbed")) %>%
+  # for noCC case, use only historical data
+  if (isTRUE(noCC)) {
+    fileMapping <- fileMapping %>%
       filter(.data$rcp == "historical")
   }
 
@@ -214,14 +218,11 @@ getDegreeDays <- function(mappingFile = NULL,
     mutate(originalFile = TRUE)
 
   # if necessary, add files to fill up missing historical data points
-  if (max(fileMapping$end[fileMapping$rcp == "historical"]) < endOfHistory &&
-        !(any(fileMapping$rcp == "2.6" &
-                fileMapping$start <= max(fileMapping$end[fileMapping$rcp == "historical"]) + 1 &
-                fileMapping$end >= endOfHistory) &&
-            length(unique(fileMapping$gcm[fileMapping$rcp == "2.6"])) == 5)) {
+  if (max(fileMapping$end[fileMapping$rcp == "historical"]) < endOfHistory) {
 
     fullMappingFile <- getSystemFile("extdata", "mappings", "ISIMIPbuildings_fileMapping.csv",
                                      package = "climbed")
+
     fileMapping <- fullMappingFile %>%
       read.csv2() %>%
       # ensure the files cover the period from the end of historical data to endOfHistory
@@ -229,15 +230,15 @@ getDegreeDays <- function(mappingFile = NULL,
              (.data$start <= max(fileMapping$end[fileMapping$rcp == "historical"]) + 1 &
                 .data$end >= endOfHistory)) %>%
       # filter out duplicated entries
-      anti_join(fileMapping, by = c("gcm", "rcp", "start", "end")) %>%
       mutate(originalFile = FALSE) %>%
       rbind(fileMapping)
 
     # If we added fill-up files and SSP2 is not in the original list, add it now
-    if (nrow(fileMapping[fileMapping$originalFile == FALSE, ]) > 0 &&
-          !("SSP2" %in% ssp)) {
+    if (nrow(fileMapping[fileMapping$originalFile == FALSE, ]) > 0 ||
+          !any(c("SSP2", "ssp2") %in% ssp)) {
       ssp <- c(ssp, "ssp2")
-      sspAddedForFillup <- TRUE
+
+      if (!any(c("SSP2", "ssp2") %in% ssp) || isTRUE(noCC)) sspAddedForFillup <- TRUE
     }
   }
 
@@ -261,9 +262,12 @@ getDegreeDays <- function(mappingFile = NULL,
     if (s == "ssp2" && isTRUE(sspAddedForFillup)) {
       files <- fileMapping %>%
         filter(!.data$originalFile)
+    } else if (isTRUE(noCC) && s != "historical") {
+      next
     } else {
       files <- fileMapping %>%
-        filter(.data[["rcp"]] %in% scenMatrix[[s]])
+        filter(.data[["rcp"]] %in% scenMatrix[[s]],
+               .data$originalFile)
     }
 
     if (nrow(files) == 0) {

@@ -41,7 +41,8 @@ smoothDegreeDays <- function(data,
     filter(.data$originalFile == FALSE) %>%
     mutate(period = map2(.data$start, .data$end, seq)) %>%
     select("model" = "gcm", "rcp", "period") %>%
-    unnest("period")
+    unnest("period") %>%
+    mutate(ssp = "ssp2")
 
 
   dataSmooth <- data %>%
@@ -50,7 +51,7 @@ smoothDegreeDays <- function(data,
     fillHistory(endOfHistory = endOfHistory) %>%
 
     # remove entries only added for historical fill-up
-    anti_join(excludeEntries, by = c("model", "rcp", "period")) %>%
+    anti_join(excludeEntries, by = c("model", "rcp", "period", "ssp")) %>%
 
     # smooth model data before averaging to avoid impact of outliers
     group_by(across(-all_of(c("period", "value")))) %>%
