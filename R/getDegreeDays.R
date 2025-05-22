@@ -125,6 +125,10 @@ getDegreeDays <- function(mappingFile = NULL,
   sspAddedForFillup <- FALSE
 
 
+  # create run tag for unique identification of temporary files
+  runTag <- substr(digest::digest(runif(1)), 1, 6)
+
+
 
   # READ-IN DATA ---------------------------------------------------------------
 
@@ -283,7 +287,8 @@ getDegreeDays <- function(mappingFile = NULL,
                              outDir = outDir,
                              globalPars = globalPars,
                              noCC = noCC,
-                             packagePath = packagePath)
+                             packagePath = packagePath,
+                             runTag = runTag)
 
           allJobs[[job$jobId]] <- job
           message("Job ", job$jobId, " submitted successfully")
@@ -314,7 +319,7 @@ getDegreeDays <- function(mappingFile = NULL,
   # --- GATHER AND SMOOTH DEGREE DAYS
 
   # gather outputs from slurm jobs
-  data <- gatherData(fileMapping = fileMapping, outDir = outDir)
+  data <- gatherData(runTag = runTag, outDir = outDir)
 
 
   # if specified, calculate degree days for constant climate

@@ -17,6 +17,7 @@
 #' @param packagePath \code{character} (Optional) Path to the package for development mode.
 #' If provided, the SLURM jobs will use devtools::load_all() with this path.
 #' If NULL (default), the installed climbed package will be loaded.
+#' @param runTag A string specifying the unique batch tag for temporary files
 #'
 #' @returns \code{list} containing job details:
 #'   - jobName: Name of the Slurm job
@@ -45,8 +46,9 @@ createSlurm <- function(fileRow,
                         jobConfig = list(),
                         outDir = "output",
                         globalPars = FALSE,
-                        noCC = noCC,
-                        packagePath = NULL) {
+                        noCC = FALSE,
+                        packagePath = NULL,
+                        runTag = "") {
   # PARAMETERS -----------------------------------------------------------------
 
   # determine required memory
@@ -99,8 +101,8 @@ createSlurm <- function(fileRow,
 
   # output file
   outputFile <- file.path(outDir, "hddcdd",
-                          paste0("hddcdd_", fileRow$gcm, "_", fileRow$rcp,
-                                 "_", fileRow$start, "-", fileRow$end, ".csv"))
+                          paste0("hddcdd_", fileRow$gcm, "_", ssp, "_", fileRow$rcp,
+                                 "_", fileRow$start, "-", fileRow$end, "_", runTag, ".csv"))
 
   # job name
   jobName <- paste0(config$jobNamePrefix, "_", fileRow$gcm, "_", fileRow$rcp,
