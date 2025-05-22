@@ -365,5 +365,8 @@ getDegreeDays <- function(mappingFile = NULL,
 
   write.csv(dataSmooth, outPath, row.names = FALSE)
 
+  # remove temporary hddcdd files
+  unlink(list.files(path = file.path(outDir, "hddcdd"), pattern = runTag, full.names = TRUE))
+
   return(invisible(outPath))
 }
