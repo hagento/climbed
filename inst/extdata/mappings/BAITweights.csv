@@ -1,5 +1,5 @@
 variable;description;value;source
-wRSDS;Weight of the difference between the climate factor and its counterfactual (RSDS);12;Staffell et al. 2023
+wRSDS;Weight of the difference between the climate factor and its counterfactual (RSDS);0.012;Staffell et al. 2023
 wSFC;Weight of the difference between the climate factor and its counterfactual (SFC);-0.2;Staffell et al. 2023
 wHUSS;Weight of the difference between the climate factor and its counterfactual (HUSS);0.05;Staffell et al. 2023
 sig;Smoothing coefficient for thermal inertia of the building;0.5;Staffell et al. 2023

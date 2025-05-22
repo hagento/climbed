@@ -11,6 +11,13 @@
 #' @param outDir \code{character} Absolute path to the output directory, containing logs/ and tmp/
 #' @param globalPars \code{logical} indicating whether to use global or gridded BAIT parameters
 #' (required if \code{bait} is TRUE).
+#' @param noCC \code{logical} indicating whether to compute a no-climate-change scenario.
+#'        If \code{TRUE}, the function will calculate degree days assuming constant climate conditions.
+#'        Default is \code{FALSE}.
+#' @param packagePath \code{character} (Optional) Path to the package for development mode.
+#' If provided, the SLURM jobs will use devtools::load_all() with this path.
+#' If NULL (default), the installed climbed package will be loaded.
+#' @param runTag A string specifying the unique batch tag for temporary files
 #'
 #' @returns \code{list} containing job details:
 #'   - jobName: Name of the Slurm job
@@ -18,7 +25,7 @@
 #'   - outputFile: Path to output file
 #'   - slurmCommand: Slurm submission command
 #'   - jobId: Slurm job ID
-#'   - batch_tag: Unique batch identifier
+#'   - batchTag: Unique batch identifier
 #'
 #' @author Hagen Tockhorn
 #'
@@ -26,6 +33,8 @@
 #' @importFrom piamutils getSystemFile
 #' @importFrom terra writeCDF
 #' @importFrom utils modifyList
+#' @importFrom digest digest
+#' @importFrom stats runif
 
 createSlurm <- function(fileRow,
                         pop,
@@ -36,21 +45,28 @@ createSlurm <- function(fileRow,
                         wBAIT,
                         jobConfig = list(),
                         outDir = "output",
-                        globalPars = FALSE) {
+                        globalPars = FALSE,
+                        noCC = FALSE,
+                        packagePath = NULL,
+                        runTag = "") {
   # PARAMETERS -----------------------------------------------------------------
+
+  # determine required memory
+  mem <- ifelse(isTRUE(bait),
+                ifelse(isTRUE(globalPars), "64G", "128G"),
+                "32G")
 
   # define default slurm job configuration
   defaultConfig <- list(
     logsDir      = file.path(outDir, "logs"),
     jobNamePrefix = "hddcdd",
-    cpusPerTask   = 32,
     nodes         = 1,
     ntasks        = 1,
+    mem           = mem,
     partition     = "standard",
-    qos           = "short"
+    qos           = "short",
+    SLURMtmpDir   = "slurm_tmp"  # Default temporary directory for slurm jobs
   )
-
-
 
   # PROCESS DATA ---------------------------------------------------------------
 
@@ -63,55 +79,62 @@ createSlurm <- function(fileRow,
   dir.create(config$logsDir, recursive = TRUE, showWarnings = FALSE)
   dir.create(file.path(outDir, "hddcdd"), recursive = TRUE, showWarnings = FALSE)
 
-  # create a unique tag for this batch of files
-  batch_tag <- format(Sys.time(), "%Y%m%d_%H%M%S")
+  # Create custom temporary directory for SLURM
+  dir.create(file.path(tmpDir, config$SLURMtmpDir), recursive = TRUE, showWarnings = FALSE)
+
+  # create output directory for grid data in noCC-case
+  gridDataDir <- NULL
+  if (isTRUE(noCC)) {
+    gridDataDir <- file.path(outDir, "hddcddGrid")
+    dir.create(gridDataDir, recursive = TRUE, showWarnings = FALSE)
+  }
+
+  # Create a unique tag with timestamp + hash
+  batchTag <- paste0(
+    format(Sys.time(), "%Y%m%d_%H%M%S"),
+    "_",
+    substr(digest::digest(runif(1)), 1, 6)  # 6-character hash
+  )
 
   # save files temporarily with a time tag to remove after successful processing
-  pop_names <- names(pop)
-  saveRDS(pop_names, sprintf("%s/pop_names_%s.rds", tmpDir, batch_tag))
-  writeCDF(pop, sprintf("%s/pop_%s.nc", tmpDir, batch_tag), overwrite = TRUE)
-
-  saveRDS(tLim, sprintf("%s/tLim_%s.rds", tmpDir, batch_tag))
-  saveRDS(hddcddFactor, sprintf("%s/hddcddFactor_%s.rds", tmpDir, batch_tag))
-  saveRDS(wBAIT, sprintf("%s/wBAIT_%s.rds", tmpDir, batch_tag))
+  saveRDS(tLim, sprintf("%s/tLim_%s.rds", tmpDir, batchTag))
+  saveRDS(hddcddFactor, sprintf("%s/hddcddFactor_%s.rds", tmpDir, batchTag))
+  saveRDS(wBAIT, sprintf("%s/wBAIT_%s.rds", tmpDir, batchTag))
 
   # output file
   outputFile <- file.path(outDir, "hddcdd",
-                          paste0("hddcdd_", fileRow$gcm, "_", fileRow$rcp,
-                                 "_", fileRow$start, "-", fileRow$end, ".csv"))
+                          paste0("hddcdd_", fileRow$gcm, "_", ssp, "_", fileRow$rcp,
+                                 "_", fileRow$start, "-", fileRow$end, "_", runTag, ".csv"))
 
   # job name
   jobName <- paste0(config$jobNamePrefix, "_", fileRow$gcm, "_", fileRow$rcp,
                     "_", fileRow$start, "-", fileRow$end)
 
-  # write slurm job script
-  jobScript <- tempfile(pattern = "initcalc_job_", fileext = ".slurm")
+  # Create job script directory
+  scriptDir <- file.path(config$tmpDir, "job_scripts")
+  dir.create(scriptDir, recursive = TRUE, showWarnings = FALSE)
 
+  # Create separate R script file (SOLUTION 1)
+  rScriptPath <- file.path(scriptDir, paste0("r_script_", batchTag, ".R"))
+  jobScript <- file.path(scriptDir, paste0("job_", batchTag, ".slurm"))
+
+  # determine package loading approach
+  if (!is.null(packagePath)) {
+    # use provided package path with load_all
+    packageLoadingCode <- sprintf("devtools::load_all(\"%s\")", packagePath)
+  } else {
+    # use standard library loading - assuming package is installed
+    packageLoadingCode <- "library(climbed)"
+  }
+
+  # Write the R script file instead of embedding it in the SLURM script
   writeLines(c(
-    "#!/bin/bash",
-    sprintf("#SBATCH --job-name=%s", jobName),
-    sprintf("#SBATCH --output=%s/log-%%j.out", config$logsDir),
-    sprintf("#SBATCH --error=%s/errlog-%%j.out", config$logsDir),
-    sprintf("#SBATCH --cpus-per-task=%s", config$cpusPerTask),
-    sprintf("#SBATCH --nodes=%s", config$nodes),
-    sprintf("#SBATCH --ntasks=%s", config$ntasks),
-    sprintf("#SBATCH --partition=%s", config$partition),
-    sprintf("#SBATCH --qos=%s", config$qos),
-    "",
-    "source /p/system/modulefiles/defaults/piam/module_load_piam",
-    "",
-    "R --no-save <<EOF",
     "library(devtools)",
-    sprintf("devtools::load_all(\"/p/tmp/hagento/dev/climbed\")"),   # not sure how to properly manage this yet
+    packageLoadingCode,
     "",
-    "# Load and restore raster with names",
-    sprintf("pop <- terra::rast('%s/pop_%s.nc')", tmpDir, batch_tag),
-    sprintf("pop_names <- readRDS('%s/pop_names_%s.rds')", tmpDir, batch_tag),
-    "names(pop) <- pop_names",
-    "",
-    sprintf("tLim <- readRDS('%s/tLim_%s.rds')", tmpDir, batch_tag),
-    sprintf("hddcddFactor <- readRDS('%s/hddcddFactor_%s.rds')", tmpDir, batch_tag),
-    sprintf("wBAIT <- readRDS('%s/wBAIT_%s.rds')", tmpDir, batch_tag),
+    sprintf("tLim <- readRDS('%s/tLim_%s.rds')", tmpDir, batchTag),
+    sprintf("hddcddFactor <- readRDS('%s/hddcddFactor_%s.rds')", tmpDir, batchTag),
+    sprintf("wBAIT <- readRDS('%s/wBAIT_%s.rds')", tmpDir, batchTag),
     "",
     sprintf("fileMapping <- data.frame(
       gcm = '%s',
@@ -130,35 +153,57 @@ createSlurm <- function(fileRow,
     "result <- initCalculation(",
     "  fileMapping = fileMapping,",
     sprintf("  ssp = '%s',", ssp),
-    sprintf("  bait = '%s',", bait),
+    sprintf("  bait = %s,", bait),
     "  tLim = tLim,",
-    "  pop = pop,",
+    sprintf("  pop = '%s',", pop),
     "  hddcddFactor = hddcddFactor,",
     "  wBAIT = wBAIT,",
-    sprintf("  globalPars = '%s'", globalPars),
+    sprintf("  globalPars = %s,", globalPars),
+    sprintf("  noCC = %s,", noCC),
+    ifelse(is.null(gridDataDir),
+           "  gridDataDir = NULL",
+           sprintf("  gridDataDir = '%s'", gridDataDir))
+    ,
     ")",
     "",
     sprintf("write.csv(result, '%s', row.names = FALSE)", outputFile),
     "",
     "# Clean up all temporary files",
-    sprintf("unlink(list.files('%s', pattern='%s', full.names=TRUE))", tmpDir, batch_tag),
-    "EOF"
-  ), jobScript)
+    sprintf("unlink(list.files('%s', pattern='%s', full.names=TRUE))", tmpDir, batchTag)
+  ), rScriptPath)
 
+  # Write the SLURM job script without using here-document
+  writeLines(c(
+    "#!/bin/bash",
+    sprintf("#SBATCH --job-name=%s", jobName),
+    sprintf("#SBATCH --output=%s/log-%%j.out", config$logsDir),
+    sprintf("#SBATCH --error=%s/errlog-%%j.out", config$logsDir),
+    sprintf("#SBATCH --nodes=%s", config$nodes),
+    sprintf("#SBATCH --mem=%s", config$mem),
+    sprintf("#SBATCH --ntasks=%s", config$ntasks),
+    sprintf("#SBATCH --partition=%s", config$partition),
+    sprintf("#SBATCH --qos=%s", config$qos),
+    "",
+    "source /p/system/modulefiles/defaults/piam/module_load_piam",
+    "",
+    # Execute the R script with Rscript instead of using here-document
+    sprintf("Rscript %s", rScriptPath)
+  ), jobScript)
 
   # submit slurm job
   slurmCommand <- sprintf("sbatch %s", jobScript)
   submissionResult <- system(slurmCommand, intern = TRUE)
   jobId <- str_extract(submissionResult, "\\d+")
 
-
   # return relevant job information
   return(invisible(list(jobName = jobName,
                         jobScript = jobScript,
+                        rScriptPath = rScriptPath,  # Added this to return path to R script
                         outputFile = outputFile,
                         slurmCommand = slurmCommand,
                         jobId = jobId,
-                        batch_tag = batch_tag)))
+                        batchTag = batchTag,
+                        gridDataDir = gridDataDir)))
 }
 
 
@@ -183,59 +228,60 @@ waitForSlurm <- function(jobIds, checkInterval = 60, maxWaitTime = 3600) {
   startTime <- Sys.time()
   jobIds <- as.character(jobIds)
   jobSet <- unique(jobIds)  # Remove duplicates
-
+  message("Monitoring jobs: ", paste(jobSet, collapse = ", "))
   while (difftime(Sys.time(), startTime, units = "secs") < maxWaitTime) {
-    # Get detailed job status including job steps
-    jobsCommand <- sprintf("sacct -j %s --parsable2 --noheader --format=jobid,state",
-                           paste(jobSet, collapse = ","))
-    jobsStatus <- system(jobsCommand, intern = TRUE)
-
-    if (length(jobsStatus) == 0) {
-      stop("No job information found. Check if jobs exist.")
+    # Try squeue first (for running/queued jobs)
+    squeueCmd <- sprintf("squeue -j %s -h -o '%%A|%%T'", paste(jobSet, collapse = ","))
+    squeueOut <- system(squeueCmd, intern = TRUE, ignore.stderr = TRUE)
+    if (length(squeueOut) > 0) {
+      Sys.sleep(checkInterval)
+      next
     }
-
-    # Process status data
-    statusMatrix <- do.call(rbind, strsplit(jobsStatus, "|", fixed = TRUE))
-    parentJobs <- statusMatrix[!grepl("\\.", statusMatrix[, 1]), , drop = FALSE]
-
-    # Check for failed states
-    failedStates <- c("FAILED", "CANCELLED", "TIMEOUT", "OUT_OF_MEMORY",
-                      "NODE_FAIL", "PREEMPTED", "DEADLINE")
-    failedJobs <- parentJobs[parentJobs[, 2] %in% failedStates, , drop = FALSE]
-
-    if (nrow(failedJobs) > 0) {
-      failMessage <- sprintf("Jobs failed: %s",
-                             paste(sprintf("JobID %s: %s",
-                                           failedJobs[, 1], failedJobs[, 2]),
-                                   collapse = ", "))
-      stop(failMessage)
-    }
-
-    # Check for active states
-    activeStates <- c("PENDING", "RUNNING", "COMPLETING", "CONFIGURING",
-                      "SUSPENDED", "REQUEUED", "RESIZING")
-    activeJobs <- parentJobs[parentJobs[, 2] %in% activeStates, , drop = FALSE]
-
-    # Verify completion
-    if (nrow(activeJobs) == 0) {
-      completedJobs <- parentJobs[parentJobs[, 2] == "COMPLETED", , drop = FALSE]
-      if (nrow(completedJobs) == length(jobSet)) {
-        message(sprintf("All %d jobs completed successfully", length(jobSet)))
+    # Check if job exists in accounting
+    sacctCmd <- sprintf("sacct -j %s -X -n -o jobid,state", paste(jobSet, collapse = ","))
+    sacctOut <- system(sacctCmd, intern = TRUE, ignore.stderr = TRUE)
+    # If we got output from sacct
+    if (length(sacctOut) > 0) {
+      # Check for completed jobs
+      allCompleted <- all(vapply(jobSet, function(id) {
+        any(grepl(paste0(id, ".*COMPLETED"), sacctOut, ignore.case = TRUE))
+      }, logical(1)))
+      if (allCompleted) {
+        message("All jobs completed successfully")
         return(TRUE)
-      } else {
-        # Some jobs are missing or in unexpected states
-        unknownJobs <- setdiff(jobSet, parentJobs[, 1])
-        if (length(unknownJobs) > 0) {
-          stop(sprintf("Jobs with unknown status: %s",
-                       paste(unknownJobs, collapse = ", ")))
+      }
+      # Check for failed jobs
+      failedJobs <- character(0)
+      failedStates <- c("FAILED", "CANCELLED", "TIMEOUT", "OUT_OF_MEMORY",
+                        "NODE_FAIL", "PREEMPTED", "DEADLINE")
+      for (id in jobSet) {
+        for (state in failedStates) {
+          if (any(grepl(paste0(id, ".*", state), sacctOut, ignore.case = TRUE))) {
+            failedJobs <- c(failedJobs, paste0(id, ": ", state))
+          }
         }
-        stop("Some jobs are in unexpected states. Check sacct manually.")
+      }
+      if (length(failedJobs) > 0) {
+        stop("Jobs failed: ", paste(failedJobs, collapse = ", "))
+      }
+      # If we get here, jobs are in some other state
+      message("Jobs in progress, waiting...")
+    } else {
+      # Try scontrol as an alternative
+      sctrlCmd <- sprintf("scontrol show job %s", paste(jobSet, collapse = " "))
+      sctrlOut <- system(sctrlCmd, intern = TRUE, ignore.stderr = TRUE)
+      if (length(sctrlOut) > 0 && !any(grepl("Invalid job id", sctrlOut))) {
+        if (any(grepl("JobState=COMPLETED", sctrlOut))) {
+          message("All jobs completed successfully")
+          return(TRUE)
+        }
+        message("Jobs found but not completed, waiting...")
+      } else {
+        message("No job information found. Will retry.")
       }
     }
-
     Sys.sleep(checkInterval)
   }
-
   if (difftime(Sys.time(), startTime, units = "secs") > maxWaitTime) {
     stop("Maximum wait time exceeded")
   }

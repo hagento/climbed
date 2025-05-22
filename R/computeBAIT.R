@@ -85,11 +85,30 @@ prepBaitInput <- function(fileNames,
 #' @importFrom utils read.csv2
 
 cfac <- function(t, type, params) {
+  # Load default parameters
+  defaultParams <- read.csv2(getSystemFile("extdata", "mappings", "cfacBAITpars.csv",
+                                           package = "climbed"))
+  defaultPars <- setNames(lapply(defaultParams$value, function(x) eval(parse(text = x))),
+                          defaultParams$variable)
+
+  # Return calculation based on type
   return(switch(type,
-                s = params[["aRSDS"]] + params[["bRSDS"]] * t,
-                w = params[["aSFC"]] + params[["bSFC"]] * t,
-                h = exp(params[["aHUSS"]] + params[["bHUSS"]] * t),
-                t = params[["T"]],
+                s = if ("aRSDS" %in% names(params) && "bRSDS" %in% names(params)) {
+                  params[["aRSDS"]] + params[["bRSDS"]] * t
+                } else {
+                  defaultPars[["aRSDS"]] + defaultPars[["bRSDS"]] * t
+                },
+                w = if ("aSFC" %in% names(params) && "bSFC" %in% names(params)) {
+                  params[["aSFC"]] + params[["bSFC"]] * t
+                } else {
+                  defaultPars[["aSFC"]] + defaultPars[["bSFC"]] * t
+                },
+                h = if ("aHUSS" %in% names(params) && "bHUSS" %in% names(params)) {
+                  exp(params[["aHUSS"]] + params[["bHUSS"]] * t)
+                } else {
+                  exp(defaultPars[["aHUSS"]] + defaultPars[["bHUSS"]] * t)
+                },
+                t = if ("T" %in% names(params)) params[["T"]] else defaultPars[["T"]],
                 warning("No valid parameter type specified.")))
 }
 
@@ -138,7 +157,7 @@ smooth <- function(r, weight) {
 #' @returns \code{terra::SpatRaster} object with blended data.
 
 blend <- function(bait, tas, weight) {
-  bBar <- (tas - mean(weight[c("bUpper", "bLower")])) * 10 / (weight[["bUpper"]] - weight[["bLower"]])
+  bBar <- (tas - mean(unlist(weight[c("bUpper", "bLower")]))) * 10 / (weight[["bUpper"]] - weight[["bLower"]])
   b    <- weight[["bMax"]] / (1 + exp(-bBar))
 
   blend <- bait * (1 - b) + (tas * b)
@@ -179,7 +198,7 @@ compBAIT <- function(baitInput, tasData, weight, params = NULL) {
   s <- solar   - cfac(tasData, type = "s", params = params)
   w <- wind    - cfac(tasData, type = "w", params = params)
   h <- hum     - cfac(tasData, type = "h", params = params)
-  t <- tasData - cfac(tasData, type = "t", params = NULL)
+  t <- tasData - cfac(tasData, type = "t", params = params)
 
   # calc bait
   bait <- tasData + weight[["wRSDS"]] * s + weight[["wSFC"]] * w + weight[["wHUSS"]] * h * t

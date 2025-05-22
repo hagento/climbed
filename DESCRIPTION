@@ -1,13 +1,14 @@
 Package: climbed
 Type: Package
 Title: Climate Data Integration for Modeling Building Energy Demand
-Version: 1.0.0
+Version: 1.1.0
 Authors@R: c(person(given = "Hagen", family = "Tockhorn",
          role = c("aut", "cre"), email = "hagento@pik-potsdam.de"))
 Maintainer: Hagen Tockhorn <hagento@pik-potsdam.de>
 Description: Prepare climate data to be used by building energy demand models.
 License: MIT + file LICENSE
 Imports:
+    digest,
     dplyr,
     ncdf4,
     pracma,
@@ -17,7 +18,9 @@ Imports:
     magclass,
     madrat,
     piamutils,
-    terra
+    purrr,
+    terra,
+    tidyr
 Encoding: UTF-8
 RoxygenNote: 7.3.2
-Date: 2025-01-21
+Date: 2025-05-22
