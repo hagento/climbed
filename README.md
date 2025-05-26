@@ -32,7 +32,7 @@ update.packages()
 
 ## Questions / Problems
 
-In case of questions / problems please contact Hagen Tockhorn <hagento@pik-potsdam.de>.
+In case of questions / problems please contact Hagen Tockhorn <hagen.tockhorn@pik-potsdam.de>.
 
 ## Citation
 
