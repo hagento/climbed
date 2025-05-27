@@ -111,7 +111,7 @@ createSlurm <- function(fileRow,
                     "_", fileRow$start, "-", fileRow$end)
 
   # Create job script directory
-  scriptDir <- file.path(config$tmpDir, "job_scripts")
+  scriptDir <- file.path(config$SLURMtmpDir, "job_scripts")
   dir.create(scriptDir, recursive = TRUE, showWarnings = FALSE)
 
   # Create separate R script file (SOLUTION 1)
