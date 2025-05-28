@@ -1,8 +1,8 @@
 # Climate Data Integration for Modeling Building Energy Demand
 
-R package **climbed**, version **1.1.0**
+R package **climbed**, version **1.1.1**
 
-[![CRAN status](https://www.r-pkg.org/badges/version/climbed)](https://cran.r-project.org/package=climbed) [![R build status](https://github.com/hagento/climbed/workflows/check/badge.svg)](https://github.com/hagento/climbed/actions) [![codecov](https://codecov.io/gh/hagento/climbed/branch/master/graph/badge.svg)](https://app.codecov.io/gh/hagento/climbed) 
+[![CRAN status](https://www.r-pkg.org/badges/version/climbed)](https://cran.r-project.org/package=climbed) [![R build status](https://github.com/hagento/climbed/workflows/check/badge.svg)](https://github.com/hagento/climbed/actions) [![codecov](https://codecov.io/gh/hagento/climbed/branch/master/graph/badge.svg)](https://app.codecov.io/gh/hagento/climbed) [![r-universe](https://pik-piam.r-universe.dev/badges/climbed)](https://pik-piam.r-universe.dev/builds)
 
 ## Purpose and Functionality
 
@@ -32,21 +32,21 @@ update.packages()
 
 ## Questions / Problems
 
-In case of questions / problems please contact Hagen Tockhorn <hagen.tockhorn@pik-potsdam.de>.
+In case of questions / problems please contact Hagen Tockhorn <hagento@pik-potsdam.de>.
 
 ## Citation
 
 To cite package **climbed** in publications use:
 
-Tockhorn H (2025). "climbed: Climate Data Integration for Modeling Building Energy Demand - Version 1.1.0."
+Tockhorn H (2025). "climbed: Climate Data Integration for Modeling Building Energy Demand - Version 1.1.1."
 
 A BibTeX entry for LaTeX users is
 
  ```latex
 @Misc{,
-  title = {climbed: Climate Data Integration for Modeling Building Energy Demand - Version 1.1.0},
+  title = {climbed: Climate Data Integration for Modeling Building Energy Demand - Version 1.1.1},
   author = {Hagen Tockhorn},
-  date = {2025-05-22},
+  date = {2025-05-28},
   year = {2025},
 }
 ```
