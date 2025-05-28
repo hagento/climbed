@@ -34,6 +34,8 @@
 #'
 #' @importFrom dplyr mutate
 #' @importFrom magrittr %>%
+#'
+#' @export
 
 initCalculation <- function(fileMapping,
                             pop,
