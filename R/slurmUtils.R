@@ -53,7 +53,7 @@ createSlurm <- function(fileRow,
 
   # determine required memory
   mem <- ifelse(isTRUE(bait),
-                ifelse(isTRUE(globalPars), "64G", "128G"),
+                ifelse(isTRUE(globalPars), "64G", "180G"),
                 "32G")
 
   # define default slurm job configuration
