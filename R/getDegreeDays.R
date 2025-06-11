@@ -62,6 +62,8 @@
 #' @param packagePath (Optional) A string specifying the path to the package for development mode.
 #' If provided, the SLURM jobs will use devtools::load_all() instead of library() to load the package.
 #'
+#' @param returnPathOnly \code{logical} If TRUE, only returns path to output file.
+#'
 #' @author Hagen Tockhorn
 #'
 #' @importFrom dplyr filter pull anti_join
@@ -83,7 +85,8 @@ getDegreeDays <- function(mappingFile = NULL,
                           globalPars = TRUE,
                           endOfHistory = 2025,
                           noCC = FALSE,
-                          packagePath = NULL) {
+                          packagePath = NULL,
+                          returnPathOnly = FALSE) {
 
   # CHECKS ---------------------------------------------------------------------
 
@@ -178,6 +181,22 @@ getDegreeDays <- function(mappingFile = NULL,
 
   # create output logs directory if it doesn't exist
   dir.create(file.path(outDir, "logs"), showWarnings = FALSE, recursive = TRUE)
+
+  # generate BAITpars if necessary
+  if (isTRUE(bait) && isFALSE(globalPars)) {
+    cacheDir <- getSystemFile("intdata", "BAITpars", package = "climbed")
+
+    cachedFile <- list.files(cacheDir, pattern = "globalBaitPars", full.names = TRUE) %>%
+      unlist()
+
+    if (!(length(cachedFile) > 0 && file.exists(cachedFile))) {
+      jobBAITpars <- createSlurm(subtype = "computeBAITpars",
+                                 runTag  = runTag,
+                                 packagePath = packagePath)
+
+      waitForSlurm(as.numeric(jobBAITpars$jobId), maxWaitTime = 2 * 60 * 60)
+    }
+  }
 
 
 
@@ -281,7 +300,8 @@ getDegreeDays <- function(mappingFile = NULL,
     for (i in seq(1, nrow(files))) {
       tryCatch(
         {
-          job <- createSlurm(fileRow = files[i, ],
+          job <- createSlurm(subtype = "initCalculation",
+                             fileRow = files[i, ],
                              pop = popMapping[[s]],
                              ssp = s,
                              bait = bait,
@@ -372,5 +392,10 @@ getDegreeDays <- function(mappingFile = NULL,
   # remove temporary hddcdd files
   unlink(list.files(path = file.path(outDir, "hddcdd"), pattern = runTag, full.names = TRUE))
 
-  return(invisible(outPath))
+  if (isTRUE(returnPathOnly)) {
+    return(outPath)
+  } else {
+    return(dataSmooth)
+  }
+
 }

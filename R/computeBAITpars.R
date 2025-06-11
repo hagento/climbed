@@ -22,8 +22,11 @@
 #' @importFrom magclass as.magpie
 #' @importFrom utils read.csv2
 #' @importFrom piamutils getSystemFile
+#'
+#' @export
 
 computeBAITpars <- function(cacheDir = "intdata/BAITpars") {
+
   # CHECK CACHE-----------------------------------------------------------------
   # absolut package path
   pkgPath <- getSystemFile(package = "climbed")
@@ -31,11 +34,11 @@ computeBAITpars <- function(cacheDir = "intdata/BAITpars") {
     fpath <- list.files(file.path(pkgPath, cacheDir), pattern = "globalBaitPars", full.names = TRUE) %>%
       unlist()
     if (length(fpath) > 0 && file.exists(fpath)) {
-      print(paste0("Load global parameters from cache: ", basename(fpath)))
+      message("Load global parameters from cache: ", basename(fpath))
       regPars <- rast(fpath)
       return(regPars)
     } else {
-      print("Global BAITpars file not in given cache directory - will be re-calculated.")
+      message("Global BAITpars file not in given cache directory - will be re-calculated.")
     }
   }
 
@@ -80,7 +83,6 @@ computeBAITpars <- function(cacheDir = "intdata/BAITpars") {
   allData$tas <- allData$tas - 273.15
 
   regPars <- do.call(c, lapply(names(vars)[names(vars) != "tas"], function(v) {
-    print(v)
     x <- allData[["tas"]]
     y <- allData[[v]]
     r <- regress(x = x, y = y, formula = y ~ x)
@@ -93,9 +95,6 @@ computeBAITpars <- function(cacheDir = "intdata/BAITpars") {
     dir.create(file.path(pkgPath, cacheDir), showWarnings = FALSE, recursive = TRUE)
     outputPath <- file.path(pkgPath, cacheDir, "globalBaitPars.tif")
     writeRaster(regPars, outputPath, overwrite = TRUE)
-    print(paste0("Saved global parameters to cache: ", basename(outputPath)))
+    message(paste0("Saved global parameters to cache: ", basename(outputPath)))
   }
-
-  # OUTPUT----------------------------------------------------------------------
-  return(regPars)
 }
