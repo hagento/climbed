@@ -1,12 +1,13 @@
-#' Create a Slurm Job for Running initCalculation
+#' Create a Slurm Job for Running initCalculation or computeBAITpars
 #'
-#' @param fileRow \code{data.frame} row containing file mapping details
-#' @param pop \code{SpatRaster} Population data to be passed to initCalculation
-#' @param ssp \code{character} Shared Socioeconomic Pathway scenario
-#' @param bait \code{logical} indicating whether to use BAIT calculation
-#' @param tLim \code{numeric} Temperature limits for degree day calculation
-#' @param hddcddFactor \code{data.frame} Heating/Cooling Degree Day factors
-#' @param wBAIT \code{numeric} Weights for BAIT calculation
+#' @param subtype \code{character} Type of calculation: "initCalculation" or "computeBAITpars"
+#' @param fileRow \code{data.frame} row containing file mapping details (required for initCalculation)
+#' @param pop \code{SpatRaster} Population data to be passed to initCalculation (required for initCalculation)
+#' @param ssp \code{character} Shared Socioeconomic Pathway scenario (required for initCalculation)
+#' @param bait \code{logical} indicating whether to use BAIT calculation (required for initCalculation)
+#' @param tLim \code{numeric} Temperature limits for degree day calculation (required for initCalculation)
+#' @param hddcddFactor \code{data.frame} Heating/Cooling Degree Day factors (required for initCalculation)
+#' @param wBAIT \code{numeric} Weights for BAIT calculation (required for initCalculation)
 #' @param jobConfig \code{list} of Slurm job configuration parameters
 #' @param outDir \code{character} Absolute path to the output directory, containing logs/ and tmp/
 #' @param globalPars \code{logical} indicating whether to use global or gridded BAIT parameters
@@ -22,7 +23,7 @@
 #' @returns \code{list} containing job details:
 #'   - jobName: Name of the Slurm job
 #'   - jobScript: Path to job script
-#'   - outputFile: Path to output file
+#'   - outputFile: Path to output file (for initCalculation only)
 #'   - slurmCommand: Slurm submission command
 #'   - jobId: Slurm job ID
 #'   - batchTag: Unique batch identifier
@@ -36,30 +37,34 @@
 #' @importFrom digest digest
 #' @importFrom stats runif
 
-createSlurm <- function(fileRow,
-                        pop,
-                        ssp,
-                        bait,
-                        tLim,
-                        hddcddFactor,
-                        wBAIT,
+createSlurm <- function(subtype,
+                        fileRow = NULL,
+                        pop = NULL,
+                        ssp = NULL,
+                        bait = NULL,
+                        tLim = NULL,
+                        hddcddFactor = NULL,
+                        wBAIT = NULL,
                         jobConfig = list(),
                         outDir = "output",
                         globalPars = FALSE,
                         noCC = FALSE,
                         packagePath = NULL,
                         runTag = "") {
+
   # PARAMETERS -----------------------------------------------------------------
 
-  # determine required memory
-  mem <- ifelse(isTRUE(bait),
-                ifelse(isTRUE(globalPars), "64G", "180G"),
-                "32G")
+  # determine required memory based on subtype
+  mem <- if (subtype == "computeBAITpars") {
+    "200G"
+  } else {
+    ifelse(isTRUE(bait), ifelse(isTRUE(globalPars), "64G", "128G"), "32G")
+  }
 
   # define default slurm job configuration
   defaultConfig <- list(
     logsDir      = file.path(outDir, "logs"),
-    jobNamePrefix = "hddcdd",
+    jobNamePrefix = if (subtype == "computeBAITpars") "computeBAITpars" else "hddcdd",
     nodes         = 1,
     ntasks        = 1,
     mem           = mem,
@@ -73,21 +78,11 @@ createSlurm <- function(fileRow,
   # match slurm job configs
   config <- modifyList(defaultConfig, jobConfig)
 
-  # create directories output, output/tmp, output/logs and output/hddcdd
+  # create basic directories
   tmpDir <- file.path(outDir, "tmp")
   dir.create(tmpDir, recursive = TRUE, showWarnings = FALSE)
   dir.create(config$logsDir, recursive = TRUE, showWarnings = FALSE)
-  dir.create(file.path(outDir, "hddcdd"), recursive = TRUE, showWarnings = FALSE)
-
-  # Create custom temporary directory for SLURM
   dir.create(file.path(tmpDir, config$SLURMtmpDir), recursive = TRUE, showWarnings = FALSE)
-
-  # create output directory for grid data in noCC-case
-  gridDataDir <- NULL
-  if (isTRUE(noCC)) {
-    gridDataDir <- file.path(outDir, "hddcddGrid")
-    dir.create(gridDataDir, recursive = TRUE, showWarnings = FALSE)
-  }
 
   # Create a unique tag with timestamp + hash
   batchTag <- paste0(
@@ -96,25 +91,38 @@ createSlurm <- function(fileRow,
     substr(digest::digest(runif(1)), 1, 6)  # 6-character hash
   )
 
-  # save files temporarily with a time tag to remove after successful processing
-  saveRDS(tLim, sprintf("%s/tLim_%s.rds", tmpDir, batchTag))
-  saveRDS(hddcddFactor, sprintf("%s/hddcddFactor_%s.rds", tmpDir, batchTag))
-  saveRDS(wBAIT, sprintf("%s/wBAIT_%s.rds", tmpDir, batchTag))
+  # initCalculation-specific setup
+  if (subtype == "initCalculation") {
+    # create directories
+    dir.create(file.path(outDir, "hddcdd"), recursive = TRUE, showWarnings = FALSE)
 
-  # output file
-  outputFile <- file.path(outDir, "hddcdd",
-                          paste0("hddcdd_", fileRow$gcm, "_", ssp, "_", fileRow$rcp,
-                                 "_", fileRow$start, "-", fileRow$end, "_", runTag, ".csv"))
+    # create output directory for grid data in noCC-case
+    if (isTRUE(noCC)) {
+      gridDataDir <- file.path(outDir, "hddcddGrid")
+      dir.create(gridDataDir, recursive = TRUE, showWarnings = FALSE)
+    }
 
-  # job name
-  jobName <- paste0(config$jobNamePrefix, "_", fileRow$gcm, "_", fileRow$rcp,
-                    "_", fileRow$start, "-", fileRow$end)
+    # save files temporarily
+    saveRDS(tLim, sprintf("%s/tLim_%s.rds", tmpDir, batchTag))
+    saveRDS(hddcddFactor, sprintf("%s/hddcddFactor_%s.rds", tmpDir, batchTag))
+    saveRDS(wBAIT, sprintf("%s/wBAIT_%s.rds", tmpDir, batchTag))
+
+    # define output file and job name
+    outputFile <- file.path(outDir, "hddcdd",
+                            paste0("hddcdd_", fileRow$gcm, "_", ssp, "_", fileRow$rcp,
+                                   "_", fileRow$start, "-", fileRow$end, "_", runTag, ".csv"))
+    jobName <- paste0(config$jobNamePrefix, "_", fileRow$gcm, "_", fileRow$rcp,
+                      "_", fileRow$start, "-", fileRow$end)
+  } else {
+    # computeBAITpars job name
+    jobName <- paste0(config$jobNamePrefix, "_", batchTag)
+  }
 
   # Create job script directory
   scriptDir <- file.path(config$SLURMtmpDir, "job_scripts")
   dir.create(scriptDir, recursive = TRUE, showWarnings = FALSE)
 
-  # Create separate R script file (SOLUTION 1)
+  # Create separate R script file
   rScriptPath <- file.path(scriptDir, paste0("r_script_", batchTag, ".R"))
   jobScript <- file.path(scriptDir, paste0("job_", batchTag, ".slurm"))
 
@@ -127,50 +135,59 @@ createSlurm <- function(fileRow,
     packageLoadingCode <- "library(climbed)"
   }
 
-  # Write the R script file instead of embedding it in the SLURM script
-  writeLines(c(
-    "library(devtools)",
-    packageLoadingCode,
-    "",
-    sprintf("tLim <- readRDS('%s/tLim_%s.rds')", tmpDir, batchTag),
-    sprintf("hddcddFactor <- readRDS('%s/hddcddFactor_%s.rds')", tmpDir, batchTag),
-    sprintf("wBAIT <- readRDS('%s/wBAIT_%s.rds')", tmpDir, batchTag),
-    "",
-    sprintf("fileMapping <- data.frame(
-      gcm = '%s',
-      rcp = '%s',
-      start = %s,
-      end = %s,
-      tas = '%s',
-      rsds = '%s',
-      sfcwind = '%s',
-      huss = '%s',
-      stringsAsFactors = FALSE)",
-      fileRow$gcm, fileRow$rcp, fileRow$start, fileRow$end,
-      fileRow$tas, fileRow$rsds, fileRow$sfcwind, fileRow$huss
-    ),
-    "",
-    "result <- initCalculation(",
-    "  fileMapping = fileMapping,",
-    sprintf("  ssp = '%s',", ssp),
-    sprintf("  bait = %s,", bait),
-    "  tLim = tLim,",
-    sprintf("  pop = '%s',", pop),
-    "  hddcddFactor = hddcddFactor,",
-    "  wBAIT = wBAIT,",
-    sprintf("  globalPars = %s,", globalPars),
-    sprintf("  noCC = %s,", noCC),
-    ifelse(is.null(gridDataDir),
-           "  gridDataDir = NULL",
-           sprintf("  gridDataDir = '%s'", gridDataDir))
-    ,
-    ")",
-    "",
-    sprintf("write.csv(result, '%s', row.names = FALSE)", outputFile),
-    "",
-    "# Clean up all temporary files",
-    sprintf("unlink(list.files('%s', pattern='%s', full.names=TRUE))", tmpDir, batchTag)
-  ), rScriptPath)
+  # Write the R script file based on subtype
+  if (subtype == "computeBAITpars") {
+    rScriptContent <- c(
+      "library(devtools)",
+      packageLoadingCode,
+      "",
+      "computeBAITpars()"
+    )
+  } else {
+    # initCalculation R script
+    rScriptContent <- c(
+      "library(devtools)",
+      packageLoadingCode,
+      "",
+      sprintf("tLim <- readRDS('%s/tLim_%s.rds')", tmpDir, batchTag),
+      sprintf("hddcddFactor <- readRDS('%s/hddcddFactor_%s.rds')", tmpDir, batchTag),
+      sprintf("wBAIT <- readRDS('%s/wBAIT_%s.rds')", tmpDir, batchTag),
+      "",
+      sprintf("fileMapping <- data.frame(
+        gcm = '%s',
+        rcp = '%s',
+        start = %s,
+        end = %s,
+        tas = '%s',
+        rsds = '%s',
+        sfcwind = '%s',
+        huss = '%s',
+        stringsAsFactors = FALSE)",
+        fileRow$gcm, fileRow$rcp, fileRow$start, fileRow$end,
+        fileRow$tas, fileRow$rsds, fileRow$sfcwind, fileRow$huss
+      ),
+      "",
+      "result <- initCalculation(",
+      "  fileMapping = fileMapping,",
+      sprintf("  ssp = '%s',", ssp),
+      sprintf("  bait = %s,", bait),
+      "  tLim = tLim,",
+      sprintf("  pop = '%s',", pop),
+      "  hddcddFactor = hddcddFactor,",
+      "  wBAIT = wBAIT,",
+      sprintf("  globalPars = %s,", globalPars),
+      sprintf("  noCC = %s,", noCC),
+      if (exists("gridDataDir")) sprintf("  gridDataDir = '%s'", gridDataDir) else "  gridDataDir = NULL",
+      ")",
+      "",
+      sprintf("write.csv(result, '%s', row.names = FALSE)", outputFile),
+      "",
+      "# Clean up all temporary files",
+      sprintf("unlink(list.files('%s', pattern='%s', full.names=TRUE))", tmpDir, batchTag)
+    )
+  }
+
+  writeLines(rScriptContent, rScriptPath)
 
   # Write the SLURM job script without using here-document
   writeLines(c(
@@ -196,16 +213,21 @@ createSlurm <- function(fileRow,
   jobId <- str_extract(submissionResult, "\\d+")
 
   # return relevant job information
-  return(invisible(list(jobName = jobName,
-                        jobScript = jobScript,
-                        rScriptPath = rScriptPath,  # Added this to return path to R script
-                        outputFile = outputFile,
-                        slurmCommand = slurmCommand,
-                        jobId = jobId,
-                        batchTag = batchTag,
-                        gridDataDir = gridDataDir)))
-}
+  result <- list(jobName = jobName,
+                 jobScript = jobScript,
+                 rScriptPath = rScriptPath,
+                 slurmCommand = slurmCommand,
+                 jobId = jobId,
+                 batchTag = batchTag)
 
+  # Add initCalculation-specific fields
+  if (subtype == "initCalculation") {
+    result$outputFile <- outputFile
+    if (exists("gridDataDir")) result$gridDataDir <- gridDataDir
+  }
+
+  return(invisible(result))
+}
 
 
 #' Wait for SLURM Jobs to Complete
