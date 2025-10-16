@@ -25,6 +25,9 @@
 #'
 #' @param gridDataDir A string specifying the path to the directory containing grid data files
 #' in .tif format. The directory must exist and contain the required degree day data files.
+#'
+#' @param endOfHistory An integer specifying the upper temporal limit for historical data.
+#'
 #' @param runTag A string specifying the unique batch tag for temporary files (optional).
 #'
 #' @returns A data frame containing population-weighted aggregated degree day data for

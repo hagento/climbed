@@ -171,6 +171,7 @@ initCalculation <- function(fileMapping,
 #' @param gridDataDir \code{character} (Optional) path to directory where grid data files will be stored
 #'        when \code{noCC} is \code{TRUE}. Required when calculating no-climate-change scenarios.
 #'        Default is \code{NULL}.
+#' @param rcp \code{character} RCP scenario
 #' @param runTag \code{character} (Optional) A unique identifier tag for temporary files.
 #'
 #' @returns \code{data.frame} containing regional population-weighted annual degree days (HDD/CDD).
