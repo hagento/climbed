@@ -25,6 +25,7 @@
 #'
 #' @param gridDataDir A string specifying the path to the directory containing grid data files
 #' in .tif format. The directory must exist and contain the required degree day data files.
+#' @param runTag A string specifying the unique batch tag for temporary files (optional).
 #'
 #' @returns A data frame containing population-weighted aggregated degree day data for
 #' constant climate scenarios, with columns for period, model, variable, temperature limit,
@@ -41,7 +42,7 @@
 #'
 #' @export
 
-computeConstantClimate <- function(fileMapping, ssp, popMapping, nHistYears, gridDataDir) {
+computeConstantClimate <- function(fileMapping, ssp, popMapping, nHistYears, gridDataDir, endOfHistory, runTag = NULL) {
 
   # READ IN DATA ---------------------------------------------------------------
 
@@ -54,15 +55,9 @@ computeConstantClimate <- function(fileMapping, ssp, popMapping, nHistYears, gri
   countries <- importData(subtype = "countrymasks-fractional_30arcmin.nc")
 
   # get relevant years
-  relevantPeriods <- fileMapping %>%
-    filter(.data$rcp == "historical") %>%
-    select("start", "end") %>%
-    mutate(period = map2(.data$start, .data$end, seq)) %>%
-    unnest("period") %>%
-    pull("period") %>%
-    unique() %>%
-    tail(nHistYears) %>%
+  relevantPeriods <- seq.int(endOfHistory - nHistYears + 1, endOfHistory) %>%
     as.character()
+
 
   if (length(relevantPeriods) == 0) {
     stop("Relevant periods for constant climate calculation could not be determined from provided file mapping.")
@@ -71,6 +66,11 @@ computeConstantClimate <- function(fileMapping, ssp, popMapping, nHistYears, gri
   # get relevant files
   fileList <- list.files(path = gridDataDir, pattern = "\\.tif$", full.names = TRUE)
   fileList <- fileList[grep(pattern = paste(relevantPeriods, collapse = "|"), fileList)]
+
+  # filter by runTag if provided
+  if (!is.null(runTag) && runTag != "") {
+    fileList <- fileList[grep(pattern = runTag, fileList)]
+  }
 
   # import and organize data
   resultList <- .importNoCCData(fileList)
