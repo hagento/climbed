@@ -55,6 +55,13 @@
 #' @param endOfHistory An integer specifying the upper temporal limit for historical data.
 #' Defaults to 2025.
 #'
+#' @param smoothMethod Character string specifying the smoothing method: "lowpass" (default)
+#'        for magclass lowpass filter, or "spline" for smooth spline interpolation.
+#'
+#' @param splineSpar Numeric value for the spline smoothing parameter (0-1). Lower values
+#'        produce closer fits to the data. Only used when smoothMethod = "spline".
+#'        Defaults to 0.5.
+#'
 #' @param noCC \code{logical} indicating whether to compute a no-climate-change scenario.
 #'        If \code{TRUE}, the function will calculate degree days assuming constant climate conditions.
 #'        Default is \code{FALSE}.
@@ -84,6 +91,8 @@ getDegreeDays <- function(mappingFile = NULL,
                           fileRev = NULL,
                           globalPars = TRUE,
                           endOfHistory = 2025,
+                          smoothMethod = "spline",
+                          splineSpar = 0.9,
                           noCC = FALSE,
                           packagePath = NULL,
                           returnPathOnly = FALSE) {
@@ -92,18 +101,15 @@ getDegreeDays <- function(mappingFile = NULL,
 
   # check for mapping file
   if (is.null(mappingFile)) {
-    if (isTRUE(noCC)) {
-      mappingFile <- getSystemFile("extdata", "mappings", "ISIMIPbuildings_fileMapping.csv",
-                                   package = "climbed")
-    } else {
-      stop("No mapping file was provided.")
-    }
+    message("Default file mapping - ISIMIPbuildings_fileMapping.csv - will be used.")
+    mappingFile <- getSystemFile("extdata", "mappings", "ISIMIPbuildings_fileMapping.csv",
+                                 package = "climbed")
   } else {
     # absolute path
     mappingFile <- getSystemFile("extdata", "mappings", mappingFile, package = "climbed")
   }
 
-  if (!file.exists(mappingFile) && isFALSE(noCC)) {
+  if (!file.exists(mappingFile)) {
     stop("Provided mapping file does not exist in /extdata/mappings.")
   }
 
@@ -127,11 +133,6 @@ getDegreeDays <- function(mappingFile = NULL,
 
   # track submitted jobs
   allJobs <- list()
-
-
-  # indicate whether SSP2 was added for historical fill-up
-  sspAddedForFillup <- FALSE
-
 
   # create run tag for unique identification of temporary files
   runTag <- substr(digest::digest(runif(1)), 1, 6)
@@ -225,39 +226,37 @@ getDegreeDays <- function(mappingFile = NULL,
     lapply(trimws)
 
 
-  # for noCC case, use only historical data
-  if (isTRUE(noCC)) {
-    fileMapping <- fileMapping %>%
-      filter(.data$rcp == "historical")
-  }
-
-
-  # indicate original mapping entries
+  # Mark all files initially as non-fill-up files
   fileMapping <- fileMapping %>%
-    mutate(originalFile = TRUE)
+    mutate(fillupFile = FALSE)
 
-  # if necessary, add files to fill up missing historical data points
-  if (max(fileMapping$end[fileMapping$rcp == "historical"]) < endOfHistory) {
+  # Save original SSP list before potentially adding SSP2 for fill-up
+  sspOriginal <- ssp
+
+  # Check if SSP2 is explicitly requested by user
+  ssp2Requested <- any(tolower(ssp) == "ssp2")
+
+  # If necessary, add RCP2.6 files to fill up missing historical data points
+  maxHistYear <- max(fileMapping$end[fileMapping$rcp == "historical"])
+  if (maxHistYear < endOfHistory) {
 
     fullMappingFile <- getSystemFile("extdata", "mappings", "ISIMIPbuildings_fileMapping.csv",
                                      package = "climbed")
 
-    fileMapping <- fullMappingFile %>%
+    # Add RCP2.6 files marked as rcp="historical" for fill-up
+    fillupFiles <- fullMappingFile %>%
       read.csv2() %>%
-      # ensure the files cover the period from the end of historical data to endOfHistory
       filter(.data$rcp == "2.6",
-             (.data$start <= max(fileMapping$end[fileMapping$rcp == "historical"]) + 1 &
-                .data$end >= endOfHistory)) %>%
-      # filter out duplicated entries
-      mutate(originalFile = FALSE) %>%
-      rbind(fileMapping)
+             .data$start <= maxHistYear + 1,
+             .data$end >= maxHistYear + 1) %>%
+      mutate(fillupFile = TRUE,
+             rcp = "historical")
 
-    # If we added fill-up files and SSP2 is not in the original list, add it now
-    if (nrow(fileMapping[fileMapping$originalFile == FALSE, ]) > 0 ||
-          !any(c("SSP2", "ssp2") %in% ssp)) {
+    fileMapping <- rbind(fileMapping, fillupFiles)
+
+    # Ensure SSP2 is in the list for processing (will be needed for fillHistory)
+    if (!ssp2Requested) {
       ssp <- c(ssp, "ssp2")
-
-      if (!any(c("SSP2", "ssp2") %in% ssp) || isTRUE(noCC)) sspAddedForFillup <- TRUE
     }
   }
 
@@ -277,16 +276,23 @@ getDegreeDays <- function(mappingFile = NULL,
   for (s in ssp) {
     message("\nProcessing SSP scenario: ", s)
 
-    # filter compatible RCP scenarios and ensure that added SSPs are only used for fill-up
-    if (s == "ssp2" && isTRUE(sspAddedForFillup)) {
+    # Determine which files to calculate for this SSP
+    if (tolower(s) == "ssp2" && !ssp2Requested) {
+      # SSP2 was added automatically for fill-up only -> calculate only fill-up files
       files <- fileMapping %>%
-        filter(!.data$originalFile)
-    } else if (isTRUE(noCC) && s != "historical") {
-      next
+        filter(.data$fillupFile == TRUE)
     } else {
+      # User requested this SSP -> calculate all matching RCP scenarios
       files <- fileMapping %>%
         filter(.data[["rcp"]] %in% scenMatrix[[s]],
-               .data$originalFile)
+               .data$fillupFile == FALSE)
+
+      # For SSP2: also include fill-up files (rcp="historical") if they exist
+      if (tolower(s) == "ssp2") {
+        fillupFilesSSP2 <- fileMapping %>%
+          filter(.data$fillupFile == TRUE)
+        files <- rbind(files, fillupFilesSSP2)
+      }
     }
 
     if (nrow(files) == 0) {
@@ -354,10 +360,12 @@ getDegreeDays <- function(mappingFile = NULL,
       unlist()
 
     dataNoCC <- computeConstantClimate(fileMapping = fileMapping,
-                                       ssp = ssp,
+                                       ssp = sspOriginal,
                                        popMapping = popMapping,
                                        nHistYears = 5,
-                                       gridDataDir = gridDataDir)
+                                       gridDataDir = gridDataDir,
+                                       endOfHistory = endOfHistory,
+                                       runTag = runTag)
 
     data <- rbind(data, dataNoCC)
   }
@@ -366,8 +374,12 @@ getDegreeDays <- function(mappingFile = NULL,
   # smooth degree days
   dataSmooth <- smoothDegreeDays(data,
                                  fileMapping,
+                                 ssp2Requested = ssp2Requested,
                                  nSmoothIter = 100,
-                                 transitionYears = 10,
+                                 smoothMethod = smoothMethod,
+                                 splineSpar = splineSpar,
+                                 transitionYears = 5,
+                                 nHistYears = 5,
                                  endOfHistory = endOfHistory,
                                  noCC = noCC,
                                  predictTransition = FALSE)
@@ -391,6 +403,11 @@ getDegreeDays <- function(mappingFile = NULL,
 
   # remove temporary hddcdd files
   unlink(list.files(path = file.path(outDir, "hddcdd"), pattern = runTag, full.names = TRUE))
+
+  # remove temporary hddcddGrid files
+  if (isTRUE(noCC)) {
+    unlink(list.files(path = file.path(outDir, "hddcddGrid"), pattern = runTag, full.names = TRUE))
+  }
 
   if (isTRUE(returnPathOnly)) {
     return(outPath)

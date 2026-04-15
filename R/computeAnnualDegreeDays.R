@@ -2,6 +2,8 @@
 #'
 #' Initiates the calculation of degree days for a single scenario, model, and time period.
 #' The calculation is split into yearly periods to improve computational stability.
+#' Terra raster operations are automatically configured for multi-core processing to
+#' optimize performance.
 #'
 #' @param fileMapping A named list containing file paths and metadata. Expected elements include:
 #'   \describe{
@@ -27,6 +29,7 @@
 #' @param gridDataDir \code{character} (Optional) path to directory where grid data files will be stored
 #'        when \code{noCC} is \code{TRUE}. Required when calculating no-climate-change scenarios.
 #'        Default is \code{NULL}.
+#' @param runTag \code{character} (Optional) A unique identifier tag for temporary files.
 #'
 #' @returns \code{data.frame} containing annual degree days.
 #'
@@ -46,13 +49,18 @@ initCalculation <- function(fileMapping,
                             wBAIT = NULL,
                             globalPars = TRUE,
                             noCC = FALSE,
-                            gridDataDir = NULL) {
+                            gridDataDir = NULL,
+                            runTag = NULL) {
 
   # ensure parameters of type logical are correctly passed
   bait       <- as.logical(bait)
   globalPars <- as.logical(globalPars)
   noCC       <- as.logical(noCC)
 
+  # configure terra options for optimal performance
+  ncores <- max(1, parallel::detectCores(logical = FALSE) - 1)
+  terra::terraOptions(memfrac = 0.8, tempdir = tempdir(), verbose = FALSE, cores = ncores)
+  message("Terra configured with ", ncores, " cores")
 
   # extract filenames
   fileNames <- c("tas" = fileMapping[["tas"]],
@@ -117,7 +125,9 @@ initCalculation <- function(fileMapping,
                     wBAIT  = wBAIT,
                     baitPars = baitPars,
                     noCC = noCC,
-                    gridDataDir = gridDataDir)
+                    gridDataDir = gridDataDir,
+                    rcp = rcp,
+                    runTag = runTag)
   }))
 
   hddcdd <- hddcdd %>%
@@ -161,6 +171,8 @@ initCalculation <- function(fileMapping,
 #' @param gridDataDir \code{character} (Optional) path to directory where grid data files will be stored
 #'        when \code{noCC} is \code{TRUE}. Required when calculating no-climate-change scenarios.
 #'        Default is \code{NULL}.
+#' @param rcp \code{character} RCP scenario
+#' @param runTag \code{character} (Optional) A unique identifier tag for temporary files.
 #'
 #' @returns \code{data.frame} containing regional population-weighted annual degree days (HDD/CDD).
 #'
@@ -182,7 +194,9 @@ compStackHDDCDD <- function(fileNames, tlim, countries, pop, factors, bait,
                             wBAIT = NULL,
                             baitPars = NULL,
                             noCC = FALSE,
-                            gridDataDir = NULL) {
+                            gridDataDir = NULL,
+                            rcp,
+                            runTag = NULL) {
   # read cellular temperature
   temp <- importData(subtype = fileNames[["tas"]])
 
@@ -241,7 +255,7 @@ compStackHDDCDD <- function(fileNames, tlim, countries, pop, factors, bait,
 
 
   # Save the combined layers
-  if (isTRUE(noCC) && length(yearlyRasterLayers) > 0) {
+  if (isTRUE(noCC) && length(yearlyRasterLayers) > 0 && rcp == "historical") {
     currentYear <- hddcdd %>%
       pull("period") %>%
       unique()
@@ -249,10 +263,14 @@ compStackHDDCDD <- function(fileNames, tlim, countries, pop, factors, bait,
     # combine all layers into a single SpatRaster
     combinedYearRaster <- rast(yearlyRasterLayers)
 
-    # Save the combined raster with a filename that includes the year
-    outputFileName <- paste0(tolower(fileNames[["gcm"]]), "_", currentYear, ".tif")
+    # Save the combined raster with a filename that includes the year and runTag
+    outputFileName <- paste0(tolower(fileNames[["gcm"]]), "_", currentYear, "_", runTag, ".tif")
     outputFilePath <- file.path(gridDataDir, outputFileName)
-    writeRaster(combinedYearRaster, outputFilePath, overwrite = TRUE)
+
+    # Skip if file already exists (likely from parallel job)
+    if (!file.exists(outputFilePath)) {
+      writeRaster(combinedYearRaster, outputFilePath, overwrite = FALSE)
+    }
   }
 
   return(hddcdd)
