@@ -9,6 +9,10 @@
 #' @param fileMapping A data frame containing metadata for locating and processing degree day output files.
 #' @param ssp2Requested Logical indicating whether SSP2 was explicitly requested by the user.
 #' @param nSmoothIter An integer specifying the number of iterations for lowpass smoothing.
+#' @param smoothMethod Character string specifying the smoothing method: "lowpass" (default)
+#'        for magclass lowpass filter, or "spline" for smooth spline interpolation.
+#' @param splineSpar Numeric value for the spline smoothing parameter (0-1). Lower values
+#'        produce closer fits to the data. Only used when smoothMethod = "spline".
 #' @param transitionYears An integer specifying the number of years for the transition period.
 #' @param nHistYears An integer specifying the number of years used for the linear regression.
 #' @param endOfHistory An integer specifying the upper temporal limit for historical data.
@@ -23,14 +27,18 @@
 #'
 #' @importFrom dplyr filter mutate select anti_join group_by across all_of ungroup reframe left_join group_modify
 #' arrange summarise rename
+#' @importFrom tidyr replace_na
 #' @importFrom magclass lowpass
 #' @importFrom purrr map2
 #' @importFrom tidyr unnest
+#' @importFrom stats smooth.spline predict
 
 smoothDegreeDays <- function(data,
                              fileMapping,
                              ssp2Requested = TRUE,
                              nSmoothIter = 50,
+                             smoothMethod = "lowpass",
+                             splineSpar = 0.5,
                              transitionYears = 10,
                              nHistYears = 20,
                              endOfHistory = 2025,
@@ -53,7 +61,11 @@ smoothDegreeDays <- function(data,
     arrange(.data$period) %>%
     mutate(value = ifelse(.data[["period"]] <= endOfHistory,
                           .data[["value"]],
-                          lowpass(.data[["value"]], i = nSmoothIter))) %>%
+                          .applySmoothing(x = .data[["value"]],
+                                          smoothMethod = smoothMethod,
+                                          splineSpar = splineSpar,
+                                          nSmoothIter = nSmoothIter,
+                                          periods = .data[["period"]]))) %>%
     ungroup()
 
   # 3) Calculate ensemble mean across climate models
@@ -67,7 +79,11 @@ smoothDegreeDays <- function(data,
     group_by(across(all_of(c("region", "variable", "tlim", "rcp", "ssp")))) %>%
     arrange(.data$period) %>%
     mutate(valueSmooth = ifelse(.data[["period"]] <= endOfHistory,
-                                lowpass(.data[["value"]], i = nSmoothIter),
+                                .applySmoothing(x = .data[["value"]],
+                                                smoothMethod = smoothMethod,
+                                                splineSpar = splineSpar,
+                                                nSmoothIter = nSmoothIter,
+                                                periods = .data[["period"]]),
                                 .data[["value"]]),
            value = ifelse(.data[["period"]] <= maxHistPeriod,
                           .data[["value"]],
@@ -93,12 +109,11 @@ smoothDegreeDays <- function(data,
   # Apply delta shift to align all scenarios with historical endpoint
   dataEnsemble <- dataEnsemble %>%
     left_join(alignDelta, by = c("region", "variable", "tlim", "rcp", "ssp")) %>%
-    mutate(value = ifelse(!is.na(.data$delta),
-                          .data$value + .data$delta,
-                          .data$value)) %>%
+    mutate(value = .data$value + replace_na(.data$delta, 0)) %>%
     select(-"delta")
 
   # 6) Filter data by period: keep historical <= endOfHistory, scenarios > endOfHistory
+  #    After delta shift alignment, scenarios naturally diverge from historical endpoint
   dataSmooth <- rbind(
     dataEnsemble %>%
       filter(.data[["rcp"]] == "historical",
@@ -108,35 +123,38 @@ smoothDegreeDays <- function(data,
              .data[["period"]] > endOfHistory)
   )
 
-  # 7) Calculate transition predictions by averaging across all scenarios
-  #    This creates a convergence point for all scenarios in early transition years
-  transitionPreds <- dataSmooth %>%
-    filter(.data$rcp != "historical",
-           .data$period > endOfHistory,
-           .data$period <= (endOfHistory + transitionYears)) %>%
-    group_by(across(all_of(c("region", "variable", "tlim", "period")))) %>%
-    reframe(prediction = mean(.data$value, na.rm = TRUE))
-
-  # 8) Apply linear weighted transition from mean prediction to scenario-specific values
-  #    Weight gradually shifts from prediction (at endOfHistory) to scenario value
-  dataSmooth <- dataSmooth %>%
-    left_join(transitionPreds, by = c("region", "variable", "tlim", "period")) %>%
-    mutate(
-      value = ifelse(
-        .data[["period"]] > endOfHistory &
-          .data[["period"]] <= (endOfHistory + transitionYears) &
-          .data[["rcp"]] != "historical" &
-          !is.na(.data[["prediction"]]) &
-          !is.na(.data[["value"]]),
-        # Linear blend: prediction + (scenario - prediction) * weight
-        .data[["prediction"]] + (.data[["value"]] - .data[["prediction"]]) *
-          ((.data[["period"]] - endOfHistory) / transitionYears),
-        .data[["value"]]
-      )
-    ) %>%
-    select(-"prediction")
-
   return(dataSmooth)
+}
 
 
+#' Apply smoothing to a time series vector
+#'
+#' @param x Numeric vector to smooth
+#' @param periods Optional period values for spline (same length as x)
+#' @param smoothMethod A character specifying the smoothing method (either "lowpass" or "spline")
+#' @param nSmoothIter An integer specifying the number of iterations for lowpass smoothing.
+#' @param splineSpar Numeric value for the spline smoothing parameter (0-1). Lower values
+#'        produce closer fits to the data. Only used when smoothMethod = "spline".
+#'
+#' @return Smoothed numeric vector
+
+.applySmoothing <- function(x, smoothMethod, splineSpar, nSmoothIter, periods = NULL) {
+  if (smoothMethod == "lowpass") {
+    # Use magclass lowpass filter
+    return(lowpass(x, i = nSmoothIter))
+  } else if (smoothMethod == "spline") {
+    # Use smooth spline
+    if (is.null(periods)) {
+      periods <- seq_along(x)
+    }
+    # Handle edge cases
+    if (length(x) < 4) {
+      return(x)  # Not enough points for spline
+    }
+    # Fit smooth spline
+    splineFit <- smooth.spline(x = periods, y = x, spar = splineSpar)
+    return(predict(splineFit, periods)$y)
+  } else {
+    stop("smoothMethod must be either 'lowpass' or 'spline'")
+  }
 }
