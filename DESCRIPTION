@@ -17,6 +17,7 @@ Imports:
     magrittr,
     magclass,
     madrat,
+    mrremind,
     piamutils,
     purrr,
     terra,

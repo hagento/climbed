@@ -1,0 +1,11 @@
+remindName,targetName
+tall,period
+all_regi,region
+all_demScen,ssp
+all_rcp_scen,rcp
+all_in,variable
+value,value
+period,ttot
+region,all_regi
+REMINDitems_out,ppfen_buildings_dyn36
+weightedCorrection,value
