@@ -55,11 +55,9 @@
 #' @param endOfHistory An integer specifying the upper temporal limit for historical data.
 #' Defaults to 2025.
 #'
-#' @param smoothMethod Character string specifying the smoothing method: "lowpass" (default)
-#'        for magclass lowpass filter, or "spline" for smooth spline interpolation.
 #'
 #' @param splineSpar Numeric value for the spline smoothing parameter (0-1). Lower values
-#'        produce closer fits to the data. Only used when smoothMethod = "spline".
+#'        produce closer fits to the data.
 #'        Defaults to 0.5.
 #'
 #' @param noCC \code{logical} indicating whether to compute a no-climate-change scenario.
@@ -91,7 +89,6 @@ getDegreeDays <- function(mappingFile = NULL,
                           fileRev = NULL,
                           globalPars = TRUE,
                           endOfHistory = 2025,
-                          smoothMethod = "spline",
                           splineSpar = 0.9,
                           noCC = FALSE,
                           packagePath = NULL,
@@ -373,16 +370,8 @@ getDegreeDays <- function(mappingFile = NULL,
 
   # smooth degree days
   dataSmooth <- smoothDegreeDays(data,
-                                 fileMapping,
-                                 ssp2Requested = ssp2Requested,
-                                 nSmoothIter = 100,
-                                 smoothMethod = smoothMethod,
                                  splineSpar = splineSpar,
-                                 transitionYears = 5,
-                                 nHistYears = 5,
-                                 endOfHistory = endOfHistory,
-                                 noCC = noCC,
-                                 predictTransition = FALSE)
+                                 endOfHistory = endOfHistory)
 
 
 

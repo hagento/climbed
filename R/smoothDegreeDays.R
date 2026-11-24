@@ -6,44 +6,25 @@
 #' from the same historical end value to their respective projected trajectories.
 #'
 #' @param data A data frame containing degree day projections.
-#' @param fileMapping A data frame containing metadata for locating and processing degree day output files.
-#' @param ssp2Requested Logical indicating whether SSP2 was explicitly requested by the user.
-#' @param nSmoothIter An integer specifying the number of iterations for lowpass smoothing.
-#' @param smoothMethod Character string specifying the smoothing method: "lowpass" (default)
-#'        for magclass lowpass filter, or "spline" for smooth spline interpolation.
 #' @param splineSpar Numeric value for the spline smoothing parameter (0-1). Lower values
-#'        produce closer fits to the data. Only used when smoothMethod = "spline".
-#' @param transitionYears An integer specifying the number of years for the transition period.
-#' @param nHistYears An integer specifying the number of years used for the linear regression.
+#'        produce closer fits to the data.
+#' @param endWeight Numeric weight of the endOfHistory data point in the spline smoothing relative
+#'        to all other points (weight 1).
 #' @param endOfHistory An integer specifying the upper temporal limit for historical data.
-#' @param noCC Logical indicating a no-climate-change scenario.
-#' @param predictTransition Logical indicating whether to predict transition values (TRUE)
-#'        or use mean-based transition (FALSE).
 #'
 #' @returns A data frame with smoothed degree day values and a seamless transition period
 #' between historical and projected data.
 #'
 #' @author Hagen Tockhorn
 #'
-#' @importFrom dplyr filter mutate select anti_join group_by across all_of ungroup reframe left_join group_modify
-#' arrange summarise rename
-#' @importFrom tidyr replace_na
-#' @importFrom magclass lowpass
-#' @importFrom purrr map2
-#' @importFrom tidyr unnest
+#' @importFrom dplyr filter mutate select group_by across all_of ungroup left_join arrange summarise rename
+#'  distinct n
 #' @importFrom stats smooth.spline predict
 
 smoothDegreeDays <- function(data,
-                             fileMapping,
-                             ssp2Requested = TRUE,
-                             nSmoothIter = 50,
-                             smoothMethod = "lowpass",
                              splineSpar = 0.5,
-                             transitionYears = 10,
-                             nHistYears = 20,
-                             endOfHistory = 2025,
-                             noCC = FALSE,
-                             predictTransition = FALSE) {
+                             endWeight = 1000,
+                             endOfHistory = 2025) {
 
   # PROCESS DATA ---------------------------------------------------------------
 
@@ -54,107 +35,86 @@ smoothDegreeDays <- function(data,
   dataFilled <- data %>%
     fillHistory(endOfHistory = endOfHistory)
 
-  # 2) Smooth future projections per model to reduce impact of outliers
-  #    Keep true historical observations unchanged
-  dataSmoothedModel <- dataFilled %>%
-    group_by(across(all_of(c("region", "variable", "tlim", "model", "rcp", "ssp")))) %>%
-    arrange(.data$period) %>%
-    mutate(value = ifelse(.data[["period"]] <= endOfHistory,
-                          .data[["value"]],
-                          .applySmoothing(x = .data[["value"]],
-                                          smoothMethod = smoothMethod,
-                                          splineSpar = splineSpar,
-                                          nSmoothIter = nSmoothIter,
-                                          periods = .data[["period"]]))) %>%
-    ungroup()
-
-  # 3) Calculate ensemble mean across climate models
-  dataEnsemble <- dataSmoothedModel %>%
+  # 2) Calculate ensemble mean across climate models
+  dataEnsemble <- dataFilled %>%
     group_by(across(all_of(c("region", "variable", "tlim", "rcp", "ssp", "period")))) %>%
     summarise(value = mean(.data[["value"]], na.rm = TRUE), .groups = "drop")
 
-  # 4) Smooth filled historical timeline
-  #    Preserve original values for true historical period (before fill-up)
-  dataEnsemble <- dataEnsemble %>%
-    group_by(across(all_of(c("region", "variable", "tlim", "rcp", "ssp")))) %>%
+  # 3) Replace historical fill-up by smoothed SSP2 RCP2.6 projection
+  #    Reference combines fill-up data and SSP2 RCP2.6 scenario (if requested), which are identical where overlapping
+  #    True historical observations remain unchanged
+  histEnsemble <- dataEnsemble %>%
+    filter(.data$rcp == "historical", .data$period <= endOfHistory) %>%
+    select(-"rcp", -"ssp")
+
+  refEnsemble <- data %>%
+    filter(.data$ssp == "ssp2", .data$rcp %in% c("historical", "2.6"), .data$period > endOfHistory) %>%
+    group_by(across(all_of(c("region", "variable", "tlim", "period")))) %>%
+    summarise(value = mean(.data[["value"]], na.rm = TRUE), .groups = "drop")
+
+  histFillSmooth <- histEnsemble %>%
+    rbind(refEnsemble) %>%
+    group_by(across(all_of(c("region", "variable", "tlim")))) %>%
     arrange(.data$period) %>%
-    mutate(valueSmooth = ifelse(.data[["period"]] <= endOfHistory,
-                                .applySmoothing(x = .data[["value"]],
-                                                smoothMethod = smoothMethod,
-                                                splineSpar = splineSpar,
-                                                nSmoothIter = nSmoothIter,
-                                                periods = .data[["period"]]),
-                                .data[["value"]]),
-           value = ifelse(.data[["period"]] <= maxHistPeriod,
-                          .data[["value"]],
-                          .data[["valueSmooth"]])) %>%
+    mutate(valueSmooth = predict(smooth.spline(.data$period, .data$value, spar = splineSpar),
+                                 .data$period)$y) %>%
     ungroup() %>%
+    select(all_of(c("region", "variable", "tlim", "period", "valueSmooth")))
+
+  histEnsemble <- histEnsemble %>%
+    left_join(histFillSmooth, by = c("region", "variable", "tlim", "period")) %>%
+    mutate(value = ifelse(.data$period <= maxHistPeriod, .data$value, .data$valueSmooth)) %>%
     select(-"valueSmooth")
 
-  # 5) Align all scenarios (including noCC) with historical endpoint via delta shift
-  #    Calculate historical value at endOfHistory
-  histAtEnd <- dataEnsemble %>%
-    filter(.data$period == endOfHistory, .data$rcp == "historical") %>%
+  # 4) Smooth each scenario (excluding noCC) over the combined historical and scenario timeline
+  #    Historical data up to endOfHistory is prepended to each scenario to avoid edge effects
+  #    The endOfHistory point is weighted strongly to pull the smoothed curve through it
+  #    smooth.spline normalizes weights to sum to the number of points, therefore lambda of the
+  #    unweighted fit is rescaled to keep the smoothness of the remaining points unchanged
+  dataScenSmooth <- dataEnsemble %>%
+    filter(!.data$rcp %in% c("historical", "noCC")) %>%
+    distinct(across(all_of(c("region", "variable", "tlim", "rcp", "ssp")))) %>%
+    left_join(histEnsemble, by = c("region", "variable", "tlim"), relationship = "many-to-many") %>%
+    rbind(dataEnsemble %>%
+            filter(!.data$rcp %in% c("historical", "noCC"), .data$period > endOfHistory)) %>%
+    group_by(across(all_of(c("region", "variable", "tlim", "rcp", "ssp")))) %>%
+    arrange(.data$period) %>%
+    mutate(w      = ifelse(.data$period == endOfHistory, endWeight, 1),
+           lambda = smooth.spline(.data$period, .data$value, spar = splineSpar)$lambda * n() / sum(.data$w),
+           value  = predict(smooth.spline(.data$period,
+                                          .data$value,
+                                          w = .data$w,
+                                          lambda = .data$lambda[1]),
+                            .data$period)$y) %>%
+    ungroup() %>%
+    filter(.data$period > endOfHistory) %>%
+    select(-"w", -"lambda")
+
+  # 5) Historical value at endOfHistory as common starting point of all scenarios
+  histAtEnd <- histEnsemble %>%
+    filter(.data$period == endOfHistory) %>%
     select(all_of(c("region", "variable", "tlim", "value"))) %>%
     rename(histValue = "value")
 
-  # Calculate delta for each scenario (including noCC) at endOfHistory
-  alignDelta <- dataEnsemble %>%
-    filter(.data$period == endOfHistory) %>%
+  # 6) Scale noCC scenario to historical endpoint
+  #    Relative changes due to population weighting are preserved, no smoothing applied
+  dataNoCC <- dataEnsemble %>%
+    filter(.data$rcp == "noCC") %>%
+    group_by(across(all_of(c("region", "variable", "tlim", "rcp", "ssp")))) %>%
+    mutate(ratio = .data$value / .data$value[.data$period == endOfHistory][1]) %>%
+    ungroup() %>%
+    filter(.data$period > endOfHistory) %>%
     left_join(histAtEnd, by = c("region", "variable", "tlim")) %>%
-    filter(.data$rcp != "historical") %>%
-    mutate(delta = .data$histValue - .data$value) %>%
-    select(all_of(c("region", "variable", "tlim", "rcp", "ssp", "delta")))
+    mutate(value = ifelse(is.finite(.data$ratio), .data$histValue * .data$ratio, .data$histValue)) %>%
+    select(-"ratio", -"histValue")
 
-  # Apply delta shift to align all scenarios with historical endpoint
-  dataEnsemble <- dataEnsemble %>%
-    left_join(alignDelta, by = c("region", "variable", "tlim", "rcp", "ssp")) %>%
-    mutate(value = .data$value + replace_na(.data$delta, 0)) %>%
-    select(-"delta")
-
-  # 6) Filter data by period: keep historical <= endOfHistory, scenarios > endOfHistory
-  #    After delta shift alignment, scenarios naturally diverge from historical endpoint
+  # 7) Combine historical data <= endOfHistory with aligned scenarios > endOfHistory
   dataSmooth <- rbind(
-    dataEnsemble %>%
-      filter(.data[["rcp"]] == "historical",
-             .data[["period"]] <= endOfHistory),
-    dataEnsemble %>%
-      filter(.data[["rcp"]] != "historical",
-             .data[["period"]] > endOfHistory)
+    histEnsemble %>%
+      mutate(rcp = "historical", ssp = "historical"),
+    dataScenSmooth,
+    dataNoCC
   )
 
   return(dataSmooth)
-}
-
-
-#' Apply smoothing to a time series vector
-#'
-#' @param x Numeric vector to smooth
-#' @param periods Optional period values for spline (same length as x)
-#' @param smoothMethod A character specifying the smoothing method (either "lowpass" or "spline")
-#' @param nSmoothIter An integer specifying the number of iterations for lowpass smoothing.
-#' @param splineSpar Numeric value for the spline smoothing parameter (0-1). Lower values
-#'        produce closer fits to the data. Only used when smoothMethod = "spline".
-#'
-#' @return Smoothed numeric vector
-
-.applySmoothing <- function(x, smoothMethod, splineSpar, nSmoothIter, periods = NULL) {
-  if (smoothMethod == "lowpass") {
-    # Use magclass lowpass filter
-    return(lowpass(x, i = nSmoothIter))
-  } else if (smoothMethod == "spline") {
-    # Use smooth spline
-    if (is.null(periods)) {
-      periods <- seq_along(x)
-    }
-    # Handle edge cases
-    if (length(x) < 4) {
-      return(x)  # Not enough points for spline
-    }
-    # Fit smooth spline
-    splineFit <- smooth.spline(x = periods, y = x, spar = splineSpar)
-    return(predict(splineFit, periods)$y)
-  } else {
-    stop("smoothMethod must be either 'lowpass' or 'spline'")
-  }
 }
