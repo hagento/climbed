@@ -12,3 +12,5 @@
 ^.*CITATION.cff$
 ^inst/intdata/
 ^output$
+^\.claude$
+^_pkgdown\.yml$

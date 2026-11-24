@@ -1,4 +1,5 @@
 linters: lucode2::lintrRules(modification = list(object_name_linter  = NULL,
                                                  todo_comment_linter = NULL,
-                                                 cyclocomp_linter    = NULL))
+                                                 cyclocomp_linter    = NULL,
+                                                 pipe_consistency_linter = pipe_consistency_linter(pipe = c("auto"))))
 encoding: "UTF-8"
