@@ -26,7 +26,7 @@
 #' @author Hagen Tockhorn
 #'
 #' @importFrom dplyr filter mutate select anti_join group_by across all_of ungroup reframe left_join group_modify
-#' arrange summarise rename
+#'  arrange summarise rename
 #' @importFrom tidyr replace_na
 #' @importFrom magclass lowpass
 #' @importFrom purrr map2

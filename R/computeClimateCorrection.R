@@ -17,6 +17,10 @@
 #' outputs a GDX file (\code{pm_ClimateCorrection.gdx}) with correction factors by region,
 #' time period, and building energy carrier.
 #'
+#' All data is given for REMIND regions. "EDGE-B resolution" refers to EDGE-B
+#' end-use/carrier variables (e.g. \code{space_heating_elecHP_fe}), "REMIND resolution"
+#' to REMIND building items (\code{ppfen_buildings_dyn36}, e.g. \code{feelhpb}).
+#'
 #' @return Invisibly returns \code{NULL}. The function is called for its side effect of
 #' writing the \code{pm_ClimateCorrection.gdx} file to the current working directory.
 #'
@@ -90,30 +94,30 @@ computeClimateCorrection <- function() {
 
   # PROCESS DATA ---------------------------------------------------------------
 
-  # Filter thermal baseline demands
+  # Filter thermal baseline demands (EDGE-B resolution)
   thermalBaselines <- baselineDemand %>%
     filter(.data$variable %in% paste0(thermalVariables, "_fe"),
            .data$ssp == configData$ssp) %>%
     mutate(period = as.numeric(as.character(.data$period)))
 
-  # Interpolate demands based on CO2 concentrations
-  interpolatedDemand <- .interpolateDemandFromConcentrations(currentConc,
-                                                             referenceConc,
-                                                             thermalBaselines,
-                                                             endOfHistory)
+  # Interpolate thermal demands based on CO2 concentrations (EDGE-B resolution)
+  interpolatedThermalDemand <- .interpolateDemandFromConcentrations(currentConc,
+                                                                    referenceConc,
+                                                                    thermalBaselines,
+                                                                    endOfHistory)
 
-  # Calculate correction factors as ratio of interpolated to baseline demand
-  correctionFactors <- .calculateClimateCorrectionFactor(interpolatedDemand, thermalBaselines)
+  # Calculate thermal correction factors as ratio of interpolated to baseline demand (EDGE-B resolution)
+  thermalCorrectionFactors <- .calculateClimateCorrectionFactor(interpolatedThermalDemand, thermalBaselines)
 
-  # Calculate weighted correction factors per REMIND item
+  # Calculate weighted correction factors per REMIND item (REMIND resolution)
   weightedCorrectionFactors <- .calculateWeightedFactors(structureMap,
                                                          baselineDemand,
-                                                         interpolatedDemand,
-                                                         correctionFactors,
+                                                         interpolatedThermalDemand,
+                                                         thermalCorrectionFactors,
                                                          configData)
 
-  # Complete missing entries (e.g., feh2b not in structure mapping) with 1.0
-  completeCorrectionFactors <- .completeClimateCorrection(weightedCorrectionFactors, columnMap)
+  # Complete missing entries (e.g., feh2b not in structure mapping) with 1.0 (REMIND resolution)
+  completeCorrectionFactors <- .completeClimateCorrection(weightedCorrectionFactors, filePaths$gdxInputFile)
 
 
 
@@ -140,28 +144,19 @@ computeClimateCorrection <- function() {
   # Get current working directory
   cwd <- getwd()
 
-  # Look for config file (cfg.txt)
-  configFile <- file.path(cwd, "cfg.txt")
-  if (!file.exists(configFile)) {
-    stop(paste("Config file not found in current directory:", configFile))
+  files <- list(
+    configFile = file.path(cwd, "cfg.txt"),
+    gdxInputFile = file.path(cwd, "fulldata_postsolve.gdx"),
+    climateDataFile = file.path(cwd, "p15_climate.gdx")
+  )
+
+  for (fileName in names(files)) {
+    if (!file.exists(files[[fileName]])) {
+      stop(fileName, " not found in current directory: ", files[[fileName]])
+    }
   }
 
-  # Look for GDX input file (fulldata_postsolve.gdx)
-  gdxInputFile <- file.path(cwd, "fulldata_postsolve.gdx")
-  if (!file.exists(gdxInputFile)) {
-    stop(paste("GDX input file not found in current directory:", gdxInputFile))
-  }
-
-  # Look for climate assessment file (p_15_climate.gdx)
-  climateDataFile <- file.path(cwd, "p15_climate.gdx")
-  if (!file.exists(climateDataFile)) {
-    stop(paste("Climate data file not found in current directory:", climateDataFile))
-  }
-  return(list(
-    configFile = configFile,
-    gdxInputFile = gdxInputFile,
-    climateDataFile = climateDataFile
-  ))
+  return(files)
 }
 
 
@@ -178,13 +173,8 @@ computeClimateCorrection <- function() {
 #' @importFrom dplyr %>% mutate select .data
 
 .extractCO2Concentrations <- function(climateDataFile) {
-  if (!file.exists(climateDataFile)) {
-    stop(paste("Climate data file not found:", climateDataFile))
-  }
-
-  data <- readGDX(climateDataFile, "p15_co2_conc")$p15_co2_conc$records
-
-  data %>%
+  climateDataFile %>%
+    readGDX("p15_co2_conc")$p15_co2_conc$records %>%
     mutate(period = as.numeric(as.character(.data$period))) %>%
     select("period", "value")
 }
@@ -242,7 +232,7 @@ computeClimateCorrection <- function() {
 #' Fetches any missing scenario files via \code{.fetchReferenceConcentrations},
 #' then reads all \code{.txt} files from the cache directory and combines them
 #' into a single data frame. The \code{"none"} scenario (no climate change) is
-#' appended as a constant equal to the last historical concentration (2014).
+#' appended as a constant equal to the mean 2025 concentration across all SSP scenarios.
 #'
 #' @param rcpMap A data frame mapping SSP scenario names to RCP codes.
 #'
@@ -262,11 +252,11 @@ computeClimateCorrection <- function() {
 
   conc <- do.call("rbind", lapply(files, function(f) {
     read.table(f, col.names = c("period", "value")) %>%
-      mutate(rcp = scenMap[[str_split(f, "_")[[1]][[3]]]])
+      mutate(rcp = scenMap[[str_split(basename(f), "_")[[1]][[2]]]])
   }))
 
-  noneValue <- conc$value[conc$rcp == scenMap[["historical"]] & conc$period == 2014]
-  rbind(conc, data.frame(period = 2015:2100, value = noneValue, rcp = "none"))
+  noneValue <- mean(conc$value[conc$period == 2025])
+  rbind(conc, data.frame(period = 2025:2100, value = noneValue, rcp = "none"))
 }
 
 
@@ -280,7 +270,8 @@ computeClimateCorrection <- function() {
 #'
 #' @param columnMap A named vector mapping REMIND column names to target names.
 #'
-#' @returns A data frame with baseline building energy demands.
+#' @returns A data frame with baseline building energy demands at EDGE-B resolution
+#' for all SSP and RCP scenarios.
 #'
 #' @importFrom gamstransfer readGDX
 #' @importFrom dplyr rename
@@ -308,35 +299,16 @@ computeClimateCorrection <- function() {
 #'
 #' @returns A named list with scenario parameters (\code{ssp}, \code{rcp}).
 #'
+#' @importFrom yaml read_yaml
 
 .extractConfigData <- function(configFile) {
-  if (!file.exists(configFile)) {
-    stop(paste("Config file not found:", configFile))
-  }
+  config <- read_yaml(configFile)
 
-  # Read config file
-  configLines <- readLines(configFile)
-
-  # Extract cm_demScen (SSP scenario)
-  sspLine <- grep("^\\s*cm_demScen:", configLines, value = TRUE)
-  ssp <- if (length(sspLine) > 0) {
-    trimws(sub("^\\s*cm_demScen:\\s*", "", sspLine[1]))
-  } else {
-    NA
-  }
-
-  # Extract cm_rcp_scen (RCP scenario)
-  rcpLine <- grep("^\\s*cm_rcp_scen:", configLines, value = TRUE)
-  rcp <- if (length(rcpLine) > 0) {
-    trimws(sub("^\\s*cm_rcp_scen:\\s*", "", rcpLine[1]))
-  } else {
-    NA
-  }
-
-  return(list(
-    ssp = ssp,
-    rcp = rcp
-  ))
+  setNames(
+    list(ssp = config$cm_demScen,
+         rcp = config$cm_rcp_scen),
+    c("ssp", "rcp")
+  )
 }
 
 
@@ -347,16 +319,17 @@ computeClimateCorrection <- function() {
 #' the two bounding RCP scenarios and calculates interpolation weights based on the
 #' current concentration's position between them. Historical data is passed through unchanged.
 #'
-#' @param currentConc A data frame with current CO2 concentrations.
+#' @param currentConc A data frame with current global CO2 concentrations.
 #'
-#' @param referenceConc A data frame with reference RCP concentration scenarios.
+#' @param referenceConc A data frame with global reference RCP concentration scenarios.
 #'
-#' @param thermalBaselines A data frame with baseline thermal demands for different RCP scenarios.
+#' @param thermalBaselines A data frame with baseline thermal demands for different RCP scenarios
+#' at EDGE-B resolution.
 #'
 #' @param endOfHistory An integer specifying the last year of the historical period.
 #' Defaults to 2025. Data up to this year is not interpolated.
 #'
-#' @returns A data frame with interpolated thermal demands. Historical periods contain
+#' @returns A data frame with interpolated thermal demands at EDGE-B resolution. Historical periods contain
 #' mean values across scenarios; future periods contain weighted interpolations based
 #' on CO2 concentrations.
 #'
@@ -406,16 +379,18 @@ computeClimateCorrection <- function() {
 #' interpolated demand to no-climate-change (noCC) baseline demand. The noCC baseline
 #' represents the demand used for REMIND calibration.
 #'
-#' @param interpolatedDemand A data frame with interpolated thermal demands based on CO2 concentrations.
+#' @param interpolatedThermalDemand A data frame with interpolated thermal demands based on
+#' CO2 concentrations at EDGE-B resolution.
 #'
-#' @param thermalBaselines A data frame with baseline thermal demands.
+#' @param thermalBaselines A data frame with baseline thermal demands at EDGE-B resolution.
 #' Must include a scenario with \code{rcp == "none"} representing no climate change.
 #'
-#' @returns A data frame with correction factors (ratio of interpolated to noCC demand).
+#' @returns A data frame with thermal correction factors (ratio of interpolated to noCC demand)
+#' at EDGE-B resolution.
 #'
 #' @importFrom dplyr %>% filter select left_join mutate .data
 
-.calculateClimateCorrectionFactor <- function(interpolatedDemand, thermalBaselines) {
+.calculateClimateCorrectionFactor <- function(interpolatedThermalDemand, thermalBaselines) {
 
   # extract noCC baseline demands (used for REMIND calibration)
   noCC <- thermalBaselines %>%
@@ -423,11 +398,12 @@ computeClimateCorrection <- function() {
     select("region", "period", "variable", "value")
 
   # calculate climate correction factor as ratio of (climate-driven) interpolated to noCC demand
-  interpolatedDemand %>%
+  interpolatedThermalDemand %>%
     select("region", "period", "variable", "value") %>%
     left_join(noCC, by = c("region", "period", "variable"), suffix = c("Interpolated", "NoCC")) %>%
-    mutate(value = .data$valueInterpolated / .data$valueNoCC, .keep = "unused",
-           variable = sub("_ue", "", .data$variable))
+    mutate(value = .data$valueInterpolated / .data$valueNoCC,
+           variable = sub("_ue", "", .data$variable),
+           .keep = "unused")
 }
 
 
@@ -437,25 +413,30 @@ computeClimateCorrection <- function() {
 #' building energy carrier level using baseline demand as weights. Non-thermal
 #' end uses are assigned a correction factor of unity (1.0).
 #'
-#' @param structureMap A data frame containing the structure mapping from EDGE to REMIND variables.
+#' @param structureMap A data frame containing the structure mapping from EDGE-B to REMIND resolution.
 #'
-#' @param baselineDemand A data frame with baseline building energy demands.
+#' @param baselineDemand A data frame with baseline building energy demands at EDGE-B resolution.
 #'
-#' @param interpolatedDemand A data frame with interpolated thermal demands based on
-#' CO2 concentrations.
+#' @param interpolatedThermalDemand A data frame with interpolated thermal demands based on
+#' CO2 concentrations at EDGE-B resolution.
 #'
-#' @param correctionFactors A data frame with disaggregated correction factors for thermal end uses.
+#' @param thermalCorrectionFactors A data frame with disaggregated correction factors for thermal
+#' end uses at EDGE-B resolution.
 #'
 #' @param configData A list with scenario configuration data (e.g., SSP, RCP) extracted from the REMIND config file.
 #'
-#' @returns A data frame with weighted correction factors per REMIND item.
+#' @returns A data frame with weighted correction factors at REMIND resolution.
 #' Values beyond 2100 are extrapolated using the 2100 value.
 #'
 #' @importFrom dplyr %>% select filter group_by ungroup mutate left_join reframe rename anti_join across all_of .data
 #' @importFrom tidyr replace_na
 #' @importFrom quitte interpolate_missing_periods
 
-.calculateWeightedFactors <- function(structureMap, baselineDemand, interpolatedDemand, correctionFactors, configData) {
+.calculateWeightedFactors <- function(structureMap,
+                                      baselineDemand,
+                                      interpolatedThermalDemand,
+                                      thermalCorrectionFactors,
+                                      configData) {
   map <- structureMap %>%
     # filter buildings variables
     select("EDGE_buildings_items", "REMINDitems_out") %>%
@@ -471,19 +452,19 @@ computeClimateCorrection <- function() {
     mutate(period = as.numeric(as.character(.data$period))) %>%
 
     # remove thermal baseline demands and add interpolated ones
-    anti_join(interpolatedDemand, by = c("period", "region", "variable")) %>%
-    rbind(interpolatedDemand) %>%
+    anti_join(interpolatedThermalDemand, by = c("period", "region", "variable")) %>%
+    rbind(interpolatedThermalDemand) %>%
 
     # map EDGE to REMIND variables
     right_join(map, by = c("variable" = "EDGE_buildings_items"), relationship = "many-to-many") %>%
 
     # join disaggregated thermal correction factors and set non-thermal to unity
-    left_join(correctionFactors, by = c("region", "period", "variable"), suffix = c("Demand", "Factor")) %>%
+    left_join(thermalCorrectionFactors, by = c("region", "period", "variable"), suffix = c("Demand", "Factor")) %>%
     replace_na(list("valueFactor" = 1)) %>%
 
     # weighted aggregation of correction factors per REMIND variable
     group_by(across(all_of(c("region", "period", "REMINDitems_out")))) %>%
-    reframe(value = sum(.data$valueFactor * .data$valueDemand) / sum(.data$valueDemand)) %>%
+    summarise(value = sum(.data$valueFactor * .data$valueDemand) / sum(.data$valueDemand)) %>%
     ungroup() %>%
 
     # fix >2100 correction factors at 2100 values
@@ -499,59 +480,55 @@ computeClimateCorrection <- function() {
 #' This function ensures all ppfen_buildings_dyn36 entries are present in the
 #' correction factors. Missing entries (e.g., hydrogen which doesn't have thermal
 #' correction) are filled with 1.0 to preserve REMIND's calibrated values.
+#' Entries outside the REMIND domain (\code{ttot} x \code{all_regi} x
+#' \code{ppfen_buildings_dyn36}) are dropped.
 #'
-#' @param correctionFactors A data frame with calculated correction factors.
+#' @param correctionFactors A data frame with weighted correction factors at REMIND
+#' resolution (REMIND regions, REMIND building items).
 #' Must have columns: period, region, REMINDitems_out, value.
 #'
-#' @param columnMap A named vector mapping REMIND column names to target names.
+#' @param gdxPath A string specifying the path to the REMIND GDX file
+#' (\code{fulldata_postsolve.gdx}) from which the domain sets are read.
 #'
-#' @returns A complete data frame with all region-period-carrier combinations,
-#' with missing values set to 1.0.
+#' @returns A complete data frame at REMIND resolution with all
+#' region-period-carrier combinations, with missing values set to 1.0.
 #'
-#' @importFrom dplyr %>% distinct full_join mutate rename .data
+#' @importFrom dplyr %>% left_join mutate .data
 #' @importFrom tidyr replace_na expand_grid
 #' @importFrom gamstransfer readGDX
 
-.completeClimateCorrection <- function(correctionFactors, columnMap) {
-  # Read the domain sets from the REMIND GDX file to get all possible combinations
-  gdxPath <- file.path(getwd(), "fulldata_postsolve.gdx")
+.completeClimateCorrection <- function(correctionFactors, gdxPath) {
+  # Read domain sets - handle different set types correctly
+  # ttot is a subset with domain "tall", read from first column
+  ttot <- readGDX(gdxPath, "ttot")$ttot$records[[1]]
+  # all_regi has domain "*" (none), read from "uni" column
+  all_regi <- readGDX(gdxPath, "all_regi")$all_regi$records$uni
+  # ppfen_buildings_dyn36 is a subset with domain "all_in", read from first column
+  ppfen_buildings_dyn36 <- readGDX(gdxPath, "ppfen_buildings_dyn36")$ppfen_buildings_dyn36$records[[1]]
 
-  tryCatch({
-    # Read domain sets - handle different set types correctly
-    # ttot is a subset with domain "tall", read from first column
-    ttot <- readGDX(gdxPath, "ttot")$ttot$records[[1]]
-    # all_regi has domain "*" (none), read from "uni" column
-    all_regi <- readGDX(gdxPath, "all_regi")$all_regi$records$uni
-    # ppfen_buildings_dyn36 is a subset with domain "all_in", read from first column
-    ppfen_buildings_dyn36 <- readGDX(gdxPath, "ppfen_buildings_dyn36")$ppfen_buildings_dyn36$records[[1]]
+  # Create complete grid of all combinations
+  completeGrid <- expand_grid(
+    period = as.numeric(as.character(ttot)),
+    region = as.character(all_regi),
+    REMINDitems_out = as.character(ppfen_buildings_dyn36)
+  )
 
-    # Create complete grid of all combinations
-    completeGrid <- expand_grid(
-      period = as.numeric(as.character(ttot)),
-      region = as.character(all_regi),
-      REMINDitems_out = as.character(ppfen_buildings_dyn36)
-    )
+  # Merge with calculated corrections and fill missing with 1.0
+  completeFactors <- completeGrid %>%
+    left_join(correctionFactors, by = c("period", "region", "REMINDitems_out"))
 
-    # Merge with calculated corrections and fill missing with 1.0
-    completeFactors <- completeGrid %>%
-      full_join(correctionFactors, by = c("period", "region", "REMINDitems_out")) %>%
-      mutate(value = replace_na(.data$value, 1.0))
+  nCalculated <- sum(!is.na(completeFactors$value))
+  nFilled <- nrow(completeFactors) - nCalculated
 
-    nCalculated <- nrow(correctionFactors)
-    nFilled <- nrow(completeFactors) - nCalculated
+  completeFactors <- completeFactors %>%
+    mutate(value = replace_na(.data$value, 1.0))
 
-    message(sprintf("Completed climate correction: %d total entries (%d calculated, %d filled with 1.0)",
-                    nrow(completeFactors),
-                    nCalculated,
-                    nFilled))
+  message(sprintf("Completed climate correction: %d total entries (%d calculated, %d filled with 1.0)",
+                  nrow(completeFactors),
+                  nCalculated,
+                  nFilled))
 
-    return(completeFactors)
-
-  }, error = function(e) {
-    warning(sprintf("Could not read domain sets from GDX to complete factors: %s", e$message))
-    warning("Falling back to calculated factors only - some entries may be missing!")
-    return(correctionFactors)
-  })
+  return(completeFactors)
 }
 
 
@@ -562,7 +539,7 @@ computeClimateCorrection <- function() {
 #' with dimensions \code{ttot}, \code{all_regi}, and \code{ppfen_buildings_dyn36}.
 #' If GDX writing fails, a CSV fallback file is created.
 #'
-#' @param correctionFactors A data frame with correction factors.
+#' @param correctionFactors A data frame with correction factors at REMIND resolution.
 #'
 #' @param outputPath A string specifying the path for the output GDX file.
 #' Defaults to \code{"pmClimateCorrection.gdx"}.
