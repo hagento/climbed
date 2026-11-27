@@ -6,12 +6,15 @@ on:
   pull_request:
     branches: [main, master]
 
+permissions:
+  contents: read
+
 jobs:
   check:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - uses: r-lib/actions/setup-pandoc@v2
 
@@ -61,6 +64,13 @@ jobs:
         shell: Rscript {0}
         run: |
           nonDummyTests <- setdiff(list.files("./tests/testthat/"), c("test-dummy.R", "_snaps"))
-          if(length(nonDummyTests) > 0 && !lucode2:::loadBuildLibraryConfig()[["skipCoverage"]]) covr::codecov(quiet = FALSE)
+          if(length(nonDummyTests) > 0 && !lucode2:::loadBuildLibraryConfig()[["skipCoverage"]]) {
+            covr::lcov(covr::package_coverage(quiet = FALSE))
+          }
         env:
           NOT_CRAN: "true"
+
+      - uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+        if: ${{ github.event_name != 'pull_request' }}
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
